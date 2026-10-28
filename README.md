@@ -16,7 +16,7 @@ material unlocks.
 
 ## Download
 
-Grab the latest build from the **[Releases](../../releases)** page:
+Grab the latest build from the **[Releases](../../releases)** page. See what changed in each version (desktop and mobile) in the **[Changelog](CHANGELOG.md)**.
 
 | Platform | File | Notes |
 |---|---|---|
