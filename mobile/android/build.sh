@@ -17,10 +17,11 @@ javac -nowarn -source 8 -target 8 -bootclasspath "$JAR" -classpath "$JAR" -d bui
 $BT/d8 --release --min-api 24 --lib "$JAR" --output build build/classes.jar
 (cd build && zip -q -j apk/unsigned.apk classes.dex)
 $BT/zipalign -f -p 4 build/apk/unsigned.apk build/apk/aligned.apk
+KS_PASS=${KEYSTORE_PASSWORD:-forgingxp}
 if [ ! -f forgingxp.keystore ]; then
-  keytool -genkeypair -keystore forgingxp.keystore -storepass forgingxp -keypass forgingxp \
+  keytool -genkeypair -keystore forgingxp.keystore -storepass "$KS_PASS" -keypass "$KS_PASS" \
     -alias forgingxp -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Forging XP, O=Michael" >/dev/null 2>&1
 fi
-$BT/apksigner sign --ks forgingxp.keystore --ks-pass pass:forgingxp --key-pass pass:forgingxp \
+$BT/apksigner sign --ks forgingxp.keystore --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
   --out ForgingXP.apk build/apk/aligned.apk
 $BT/apksigner verify ForgingXP.apk && echo "OK -> $(pwd)/ForgingXP.apk"

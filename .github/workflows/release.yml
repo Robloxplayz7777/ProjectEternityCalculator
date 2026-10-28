@@ -1,0 +1,85 @@
+name: Release
+
+# Push a tag like v1.2.0 to build both apps and publish them as a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create the release for (e.g. v1.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: desktop/target/release/ForgingXpCalculator.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;35.0.0" > /dev/null
+      - name: Restore signing key (optional secret)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > mobile/android/forgingxp.keystore
+            echo "Using the project signing key."
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 secret not set - APK is signed with a temporary key and won't install over an existing copy."
+          fi
+      - name: Build APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: bash mobile/android/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: mobile/android/ForgingXP.apk
+
+  release:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Forging XP Calculator ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            dist/ForgingXpCalculator.exe
+            dist/ForgingXP.apk
+          body: |
+            ### Downloads
+            - **Windows 10/11** — `ForgingXpCalculator.exe` (single file, uses the WebView2 runtime built into Windows)
+            - **Android 7.0+** — `ForgingXP.apk` (sideload; allow *Install unknown apps*)
+
+            ### Highlights
+            - Materials Needed, Level Projection and XP Table
+            - Whole-craft rounding (4 items per craft), material unlock levels, fastest route
+            - Themes, accent colours, sounds; desktop transparency/resizing; mobile swipe tabs, haptics, scroll-safe sliders
