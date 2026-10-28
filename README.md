@@ -20,11 +20,30 @@ Grab the latest build from the **[Releases](../../releases)** page:
 
 | Platform | File | Notes |
 |---|---|---|
-| Windows 10/11 | `ForgingXpCalculator.exe` (+ `WebView2Loader.dll` if included) | Keep both files in the same folder. Uses the WebView2 runtime that ships with Windows. |
+| Windows 10/11 | `ForgingXpCalculator.exe` | Single file. Uses the WebView2 runtime that ships with Windows. |
 | Android 7.0+ | `ForgingXP.apk` | Sideload: open the file on your phone and allow *Install unknown apps*. |
 
 Every push to `main` is also built automatically by GitHub Actions; the latest builds are under
 **Actions → Build → Artifacts**.
+
+### Publishing a new release
+
+Push a version tag and GitHub builds both apps and publishes the release automatically:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+(or run **Actions → Release → Run workflow**). For the APK to install over an existing copy, CI has
+to sign it with the project key. Add two repository secrets under
+**Settings → Secrets and variables → Actions**:
+
+- `ANDROID_KEYSTORE_B64`: your `forgingxp.keystore`, base64-encoded
+  (PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("forgingxp.keystore")) | Set-Clipboard`)
+- `ANDROID_KEYSTORE_PASSWORD`: the keystore password
+
+Without them the release APK is signed with a temporary key.
 
 ## Features
 
