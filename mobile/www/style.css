@@ -115,7 +115,7 @@ button { touch-action: manipulation; }
 .sub-h { font-size: .74em; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); font-weight: 650; margin-top: 2px; }
 .sub-h .h-note { float: right; text-transform: none; letter-spacing: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
 
-.pair { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 400px) { .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---------- steppers & inputs ---------- */
@@ -153,7 +153,7 @@ button { touch-action: manipulation; }
 .bar { height: 5px; border-radius: 99px; background: var(--track); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--accent); transition: width .35s var(--ease); }
 
-.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .qchip {
   height: 36px; border-radius: 99px; border: 1px solid var(--border); background: transparent;
   color: var(--text-dim); font-size: .85em; font-weight: 600; font-variant-numeric: tabular-nums;
@@ -168,6 +168,8 @@ button { touch-action: manipulation; }
 
 /* ---------- material grid (Needed) ---------- */
 .mat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.card, .scroll > * { min-width: 0; max-width: 100%; }
+input { width: 100%; min-width: 0; }
 .mat {
   position: relative; display: flex; flex-direction: column; gap: 6px; padding: 11px 11px 10px;
   border-radius: 12px; border: 1px solid var(--border); background: var(--chip);
@@ -243,7 +245,7 @@ button { touch-action: manipulation; }
 .res-sub { font-size: .84em; color: var(--text-dim); line-height: 1.45; }
 .res-sub b { color: var(--text); }
 .res-sub .warn, .warn { color: var(--bad); }
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .stat { background: var(--chip); border: 1px solid var(--border); border-radius: 11px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stat span { font-size: .74em; color: var(--text-dim); }
 .stat b { font-size: 1.08em; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -366,7 +368,7 @@ td.dimc { color: var(--text-dim); }
   transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
   display: flex; align-items: center; gap: 9px; max-width: calc(100% - 28px);
   height: 44px; padding: 0 16px 0 10px; border-radius: 99px;
-  background: color-mix(in srgb, var(--bg-2) 92%, transparent); color: var(--text);
+  background: var(--bg-2); color: var(--text);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent);
   backdrop-filter: blur(12px); font-size: .9em; white-space: nowrap;
@@ -428,7 +430,7 @@ label.row > span:first-child { flex: 1; }
 .sw:active { transform: scale(.9); }
 .sw.active { border-color: var(--text); }
 .set-mats { display: flex; flex-direction: column; gap: 6px; }
-.set-mat { display: grid; grid-template-columns: 22px 1fr 74px 96px; align-items: center; gap: 9px; font-size: .9em; min-height: 46px; }
+.set-mat { display: grid; grid-template-columns: 22px minmax(0, 1fr) 74px 96px; align-items: center; gap: 9px; font-size: .9em; min-height: 46px; }
 .set-mat .sm-lv { display: flex; align-items: center; gap: 5px; font-size: .78em; color: var(--text-dim); }
 .set-mat .set-inline { height: 38px; }
 .set-mat .sm-lv .set-inline { text-align: center; padding: 0 4px; }
@@ -473,3 +475,12 @@ label.row > span:first-child { flex: 1; }
 
 .kb .bottom-nav, .kb .peek { display: none; }
 .row.col > span:first-child { flex: none; }
+/* narrow phones */
+.alt > span:not(.a-n):not(.a-u):not(.lock):not(.mi) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 350px) {
+  .alt .a-u { min-width: 0; font-size: .78em; }
+  .alt { gap: 7px; padding: 8px 9px; }
+  .swatches { gap: 4px; }
+  .sw { width: auto; height: auto; flex: 1 1 0; aspect-ratio: 1; max-width: 34px; }
+  .scroll { padding-left: 10px; padding-right: 10px; }
+}
