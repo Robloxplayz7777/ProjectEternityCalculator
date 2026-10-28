@@ -28,14 +28,10 @@ Every push to `main` is also built automatically by GitHub Actions; the latest b
 
 ### Publishing a new release
 
-Push a version tag and GitHub builds both apps and publishes the release automatically:
-
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-(or run **Actions → Release → Run workflow**). For the APK to install over an existing copy, CI has
+Add a new section at the top of [`CHANGELOG.md`](CHANGELOG.md), for example
+`## [1.2.0] — 2026-11-02`, with **Desktop** and **Mobile** notes, and push it to `main`. GitHub
+Actions builds both apps and publishes **v1.2.0**, using that changelog section as the release notes.
+You can also run **Actions → Release → Run workflow** or push a `v1.2.0` tag. For the APK to install over an existing copy, CI has
 to sign it with the project key. Add two repository secrets under
 **Settings → Secrets and variables → Actions**:
 
