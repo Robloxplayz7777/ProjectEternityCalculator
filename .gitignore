@@ -1,0 +1,26 @@
+# Rust / desktop
+desktop/target/
+**/*.rs.bk
+
+# Android build output
+mobile/android/build/
+mobile/android/assets/
+mobile/android/*.apk
+
+# Signing keys — never commit these
+*.keystore
+*.jks
+*.p12
+
+# Local binaries (published on the Releases page instead)
+*.exe
+*.dll
+*.apk
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.idsig

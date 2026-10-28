@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Forging XP</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+<div id="app" class="app">
+  <div class="forge-glow" aria-hidden="true"></div>
+
+  <!-- ======= Top bar ======= -->
+  <header class="topbar">
+    <span class="tb-logo">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 8.5h14.5l5-1.5-2.2 4.2c-.4.7-1.1 1.1-1.9 1.2l-2.9.4V15H9.5v-2.2L6 12.3C4.2 12 2.8 10.6 2.3 8.9L2 8.5z"/><path d="M8 15h8l2 4.5H6z"/><circle cx="17.5" cy="4" r="1.1"/><circle cx="20.5" cy="2.6" r=".7"/></svg>
+    </span>
+    <div class="tb-titles">
+      <span class="tb-title">Forging XP</span>
+      <span class="tb-sub" id="tb-sub">Materials Needed</span>
+    </div>
+  </header>
+
+  <!-- ======= Pager ======= -->
+  <div class="pager" id="pager">
+    <div class="track" id="track">
+
+      <!-- Materials Needed -->
+      <section class="panel" data-tab="needed">
+        <div class="scroll" id="scroll-needed">
+          <div class="pair">
+            <div class="card edge-start">
+              <div class="card-title"><span class="dot dim"></span>Start</div>
+              <div class="num" data-bind="need.lv"></div>
+              <div class="xpwrap">
+                <span class="lbl">XP</span>
+                <input id="need-xp" class="inp" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" enterkeyhint="done">
+                <span class="of" id="need-xp-of"></span>
+              </div>
+              <div class="bar"><i id="need-xp-bar"></i></div>
+            </div>
+            <div class="card edge-target">
+              <div class="card-title"><span class="dot"></span>Target</div>
+              <div class="num" data-bind="need.target"></div>
+              <div class="quick">
+                <button class="qchip" data-add="1">+1</button>
+                <button class="qchip" data-add="5">+5</button>
+                <button class="qchip" data-add="10">+10</button>
+                <button class="qchip" data-add="max">Max</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>Material</div>
+            <div class="mat-grid" id="need-mats"></div>
+          </div>
+
+          <div class="card result" id="need-result">
+            <div class="res-head">
+              <div class="res-icon" id="need-res-icon"></div>
+              <div class="res-text">
+                <div class="res-label" id="need-res-label">Steel needed</div>
+                <div class="res-big"><span id="need-count">0</span><em id="need-unit">steel</em></div>
+              </div>
+            </div>
+            <div class="res-sub" id="need-sub"></div>
+            <div class="banner hidden" id="need-banner"></div>
+            <div class="stats">
+              <div class="stat"><span>XP required</span><b id="need-st-xp">0</b></div>
+              <div class="stat"><span>Levels</span><b id="need-st-lv"></b></div>
+              <div class="stat"><span>Crafts of 4</span><b id="need-st-crafts">0</b></div>
+              <div class="stat"><span>Overshoot</span><b id="need-st-over">0</b></div>
+            </div>
+            <div class="journey" id="need-journey"><div class="j-track"><i class="j-done"></i><i class="j-go"></i></div><div class="j-labels"></div></div>
+            <div class="route" id="need-route">
+              <h4 class="sub-h">Fastest route</h4>
+              <div class="alt-list route-list"></div>
+            </div>
+            <h4 class="sub-h">Same goal, other materials</h4>
+            <div class="alt-list" id="need-alt"></div>
+            <button class="btn primary wide" id="need-calc">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14.5 3.5l6 6-2.5 2.5-1.6-1.6-7.9 7.9a2 2 0 0 1-2.8 0l-.1-.1a2 2 0 0 1 0-2.8l7.9-7.9L12 6z"/></svg>
+              Strike the anvil
+            </button>
+          </div>
+
+          <div class="card breakdown">
+            <button class="bd-toggle" id="need-bd-toggle">
+              <svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              Level-by-level breakdown
+            </button>
+            <div class="bd-body hidden" id="need-bd"></div>
+          </div>
+          <div class="end-pad"></div>
+        </div>
+        <button class="peek" id="peek-needed" aria-label="Jump to result"></button>
+      </section>
+
+      <!-- Level Projection -->
+      <section class="panel" data-tab="proj">
+        <div class="scroll" id="scroll-proj">
+          <div class="card edge-start">
+            <div class="card-title"><span class="dot dim"></span>Starting point</div>
+            <div class="num" data-bind="proj.lv"></div>
+            <div class="xpwrap">
+              <span class="lbl">XP</span>
+              <input id="proj-xp" class="inp" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" enterkeyhint="done">
+              <span class="of" id="proj-xp-of"></span>
+            </div>
+            <div class="bar"><i id="proj-xp-bar"></i></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>Materials on hand
+              <button class="mini-btn" id="proj-clear">Clear</button>
+            </div>
+            <div class="inv-list" id="proj-mats"></div>
+          </div>
+
+          <div class="card result" id="proj-result">
+            <div class="res-label">You'll reach</div>
+            <div class="ring-row">
+              <div class="ring">
+                <svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="52"/><circle class="ring-fg" id="proj-ring" cx="60" cy="60" r="52"/></svg>
+                <div class="ring-in"><small>Level</small><b id="proj-lv">1</b></div>
+              </div>
+              <div class="ring-side">
+                <div class="gain" id="proj-gain"></div>
+                <div class="res-sub" id="proj-into"></div>
+              </div>
+            </div>
+            <div class="stats">
+              <div class="stat"><span>XP gained</span><b id="proj-st-gain">0</b></div>
+              <div class="stat"><span>Total XP</span><b id="proj-st-total">0</b></div>
+            </div>
+            <div class="mix" id="proj-mix"></div>
+            <h4 class="sub-h" id="proj-next-h"></h4>
+            <div class="alt-list" id="proj-next"></div>
+            <button class="btn primary wide" id="proj-calc">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+              Forge it all
+            </button>
+          </div>
+          <div class="end-pad"></div>
+        </div>
+        <button class="peek" id="peek-proj" aria-label="Jump to result"></button>
+      </section>
+
+      <!-- XP Table -->
+      <section class="panel" data-tab="table">
+        <div class="scroll" id="scroll-table">
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>Blacksmithing XP curve</div>
+            <div class="formula">floor((1500 + 400n + 40n²) × 3.4) · n = level − 1</div>
+            <p class="hint">Tap a row to set your <b>target</b> · hold a row to set your <b>start</b>.</p>
+            <div class="tbl-wrap"><table class="xp-table" id="xp-table"></table></div>
+          </div>
+          <div class="end-pad"></div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="panel" data-tab="settings">
+        <div class="scroll settings-body" id="scroll-settings">
+          <div class="card">
+            <h3>Materials <small>unlock level · XP per 4</small></h3>
+            <div id="set-mats" class="set-mats"></div>
+            <button id="btn-reset-mats" class="btn">Reset to defaults</button>
+          </div>
+
+          <div class="card">
+            <h3>Audio &amp; feel</h3>
+            <div class="row"><span>Master volume</span><div class="slider" data-key="volume" data-min="0" data-max="100"></div></div>
+            <div class="row"><span>UI volume</span><div class="slider" data-key="volUI" data-min="0" data-max="100"></div></div>
+            <div class="row"><span>Forge volume</span><div class="slider" data-key="volForge" data-min="0" data-max="100"></div></div>
+            <label class="row"><span>Mute</span><input id="set-mute" type="checkbox" class="switch"></label>
+            <label class="row"><span>Haptics</span><input id="set-haptics" type="checkbox" class="switch"></label>
+          </div>
+
+          <div class="card">
+            <h3>Appearance</h3>
+            <div class="row"><span>Theme</span>
+              <div class="seg">
+                <button id="theme-dark" class="seg-btn">Dark</button>
+                <button id="theme-light" class="seg-btn">Light</button>
+              </div>
+            </div>
+            <div class="row col"><span>Accent</span>
+              <div class="swatches" id="swatches"></div>
+            </div>
+            <div class="row"><span>Brightness</span><div class="slider" data-key="brightness" data-min="60" data-max="140"></div></div>
+            <div class="row"><span>Text size</span><div class="slider" data-key="zoom" data-min="85" data-max="125" data-step="5"></div></div>
+            <label class="row"><span>Forge glow</span><input id="set-glow" type="checkbox" class="switch"></label>
+            <label class="row"><span>Animations</span><input id="set-anim" type="checkbox" class="switch"></label>
+          </div>
+
+          <div class="card">
+            <button id="btn-reset-all" class="btn">Reset all settings</button>
+            <div class="about">
+              <p>Blacksmithing is a skill stat — steeper skill curve × 3.4. Max level 35 (2,640,304 total XP). Crafts use 4 items at a time.</p>
+              <p>Swipe left/right to switch tabs. Sliders only move when you drag them sideways, so scrolling never changes a value. Hold − / + to repeat.</p>
+            </div>
+          </div>
+          <div class="end-pad"></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ======= Bottom nav ======= -->
+  <nav class="bottom-nav" id="nav">
+    <i class="nav-pill" id="nav-pill"></i>
+    <button class="nav-btn" data-tab="needed">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><path d="M4 9l3-4h10l3 4-3 2H7z"/><path d="M4 12l3 2h10l3-2v4l-3 3H7l-3-3z" opacity=".55"/></svg>
+      <span>Needed</span>
+    </button>
+    <button class="nav-btn" data-tab="proj">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+      <span>Projection</span>
+    </button>
+    <button class="nav-btn" data-tab="table">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M4 15h16M10 10v10"/></svg>
+      <span>XP Table</span>
+    </button>
+    <button class="nav-btn" data-tab="settings">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="sparks" class="sparks"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

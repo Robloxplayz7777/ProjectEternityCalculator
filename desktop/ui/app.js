@@ -1,0 +1,807 @@
+// ============================================================
+// Forging XP — Blacksmithing calculator
+// ============================================================
+"use strict";
+
+const HOST = !!(window.ipc && window.ipc.postMessage);
+const send = (cmd, extra = {}) => { if (HOST) try { window.ipc.postMessage(JSON.stringify({ cmd, ...extra })); } catch {} };
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const fmt = n => Math.round(n).toLocaleString("en-US");
+
+// ============================================================
+// XP curve  (skill stat: floor((1500 + 400n + 40n²) × 3.4), n = L − 1)
+// ============================================================
+const MAX_LEVEL = 35;
+function xpToNext(L) {
+  if (L < 1 || L >= MAX_LEVEL) return 0;
+  const n = L - 1;
+  return Math.floor((1500 + 400 * n + 40 * n * n) * 34 / 10);
+}
+const CUM = [0, 0]; // CUM[L] = total XP from Lv1 to reach L
+for (let L = 1; L < MAX_LEVEL; L++) CUM[L + 1] = CUM[L] + xpToNext(L);
+const totalAt = (L, xp) => CUM[Math.min(Math.max(L, 1), MAX_LEVEL)] + xp;
+function levelFromTotal(t) {
+  let L = 1;
+  while (L < MAX_LEVEL && t >= CUM[L + 1]) L++;
+  return { lv: L, rem: t - CUM[L] };
+}
+
+// ============================================================
+// Materials
+// ============================================================
+const MATS = [
+  { id: "iron",       name: "Iron",       lv: 1,  def: 320,  c: "#b9bec7", c2: "#7d838d", shape: "ingot" },
+  { id: "steel",      name: "Steel",      lv: 6,  def: 1120, c: "#8fb4d9", c2: "#4f6f91", shape: "ingot" },
+  { id: "kobold",     name: "Kobold",     lv: 15, def: 2560, c: "#e8bf5a", c2: "#a67a1e", shape: "ingot" },
+  { id: "crystalite", name: "Crystalite", lv: 25, def: 4160, c: "#7ff0f0", c2: "#2aa5b8", shape: "crystal" },
+  { id: "obsidian",   name: "Obsidian",   lv: 35, def: 0,    c: "#9b6df0", c2: "#3b2569", shape: "shard" },
+];
+const MAT = Object.fromEntries(MATS.map(m => [m.id, m]));
+const per4 = id => +S.per4[id] || 0;
+// Crafting consumes materials 4 at a time, so everything rounds to whole crafts.
+const craftsFor = (xp, id) => per4(id) > 0 ? Math.ceil(Math.max(0, xp) / per4(id)) : null;
+const itemsFor = (xp, id) => { const c = craftsFor(xp, id); return c == null ? null : c * 4; };
+const xpFromItems = (n, id) => Math.floor(n / 4) * per4(id);   // leftover (n % 4) gives nothing
+const unlockOf = id => Math.max(1, Math.min(MAX_LEVEL, +S.unlock[id] || 1));
+const usableAt = (id, L) => per4(id) > 0 && unlockOf(id) <= L;
+const LOCK_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+// badge describing when a material becomes usable, relative to level L
+function lockBadge(id, L, target = MAX_LEVEL) {
+  const u = unlockOf(id);
+  if (u <= 1) return "";
+  if (u >= MAX_LEVEL) return `<span class="lock never" title="Only usable at max level — gives no levelling XP">${LOCK_SVG}Lv ${u} · max only</span>`;
+  if (u <= L) return `<span class="lock ok" title="Unlocked at level ${u}">Lv ${u}+</span>`;
+  if (u >= target) return `<span class="lock never" title="Unlocks at level ${u}, beyond your target">${LOCK_SVG}Locked until Lv ${u}</span>`;
+  return `<span class="lock soon" title="Unlocks at level ${u}">${LOCK_SVG}Unlocks Lv ${u}</span>`;
+}
+// Greedy route from total XP `cur` to `to`. pick(L) → material id to use at level L (or null).
+function planRoute(cur, to, pick) {
+  const steps = [];
+  let guard = 0;
+  while (cur < to && guard++ < 200) {
+    const L = levelFromTotal(cur).lv;
+    const id = pick(L);
+    if (!id) return { steps, cur, stuck: true };
+    // run this material until the pick would change (next unlock) or we reach the goal
+    let bp = to;
+    for (let k = L + 1; k <= MAX_LEVEL; k++) { if (CUM[k] >= to) break; if (pick(k) !== id) { bp = CUM[k]; break; } }
+    const crafts = Math.ceil((bp - cur) / per4(id));
+    const fromL = L;
+    cur += crafts * per4(id);
+    const last = steps[steps.length - 1];
+    if (last && last.id === id) { last.crafts += crafts; last.toL = levelFromTotal(Math.min(cur, CUM[MAX_LEVEL])).lv; }
+    else steps.push({ id, crafts, fromL, toL: levelFromTotal(Math.min(cur, CUM[MAX_LEVEL])).lv });
+  }
+  return { steps, cur, stuck: false };
+}
+// best (highest XP per craft) known material usable at L
+const bestAt = (L, except) => MATS.filter(m => m.id !== except && usableAt(m.id, L)).sort((a, b) => per4(b.id) - per4(a.id))[0]?.id || null;
+
+function matIcon(id, cls = "") {
+  const m = MAT[id];
+  const g = `g-${id}-${Math.random().toString(36).slice(2, 7)}`;
+  let body;
+  if (m.shape === "ingot") {
+    body = `
+      <path d="M5 15 L9 9 H23 L27 15 Z" fill="url(#${g}t)"/>
+      <path d="M5 15 H27 L25.5 21.5 H6.5 Z" fill="url(#${g}s)"/>
+      <path d="M9 9 H23 L24 10.5 H8 Z" fill="#fff" opacity=".35"/>
+      <path d="M7 16 H25" stroke="#fff" stroke-opacity=".18" stroke-width="1"/>`;
+  } else if (m.shape === "crystal") {
+    body = `
+      <path d="M16 3 L23 11 L16 29 L9 11 Z" fill="url(#${g}s)"/>
+      <path d="M16 3 L23 11 L16 13 L9 11 Z" fill="url(#${g}t)"/>
+      <path d="M16 13 L16 29 L9 11 Z" fill="#fff" opacity=".18"/>
+      <path d="M24 14 L28 18 L25 26 L22 18 Z" fill="url(#${g}s)" opacity=".8"/>
+      <path d="M8 15 L10 19 L8 24 L5 19 Z" fill="url(#${g}t)" opacity=".7"/>`;
+  } else {
+    body = `
+      <path d="M7 24 L12 6 L19 4 L26 13 L22 27 L11 28 Z" fill="url(#${g}s)"/>
+      <path d="M12 6 L19 4 L17 15 L7 24 Z" fill="url(#${g}t)"/>
+      <path d="M17 15 L26 13 L22 27 Z" fill="#000" opacity=".25"/>
+      <path d="M12 6 L19 4 L18 7 Z" fill="#fff" opacity=".6"/>`;
+  }
+  return `<span class="mi ${cls}"><svg viewBox="0 0 32 32">
+    <defs>
+      <linearGradient id="${g}t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".25" stop-color="${m.c}"/><stop offset="1" stop-color="${m.c}"/></linearGradient>
+      <linearGradient id="${g}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${m.c}"/><stop offset="1" stop-color="${m.c2}"/></linearGradient>
+    </defs>${body}</svg></span>`;
+}
+
+const ICON = {
+  minus: `<svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>`,
+  plus:  `<svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg>`,
+};
+
+// ============================================================
+// State
+// ============================================================
+const DEFAULTS = {
+  volume: 60, muted: false, volUI: 100, volForge: 100,
+  theme: "dark", accent: "#fb923c", brightness: 100, panelOpacity: 92, windowOpacity: 100, zoom: 100,
+  glow: true, anim: true, pinned: false,
+  tab: "needed",
+  per4: Object.fromEntries(MATS.map(m => [m.id, m.def])),
+  unlock: Object.fromEntries(MATS.map(m => [m.id, m.lv])),
+  need: { mat: "steel", lv: 1, xp: 0, target: 10 },
+  proj: { lv: 1, xp: 0, counts: Object.fromEntries(MATS.map(m => [m.id, 0])) },
+};
+let S = structuredClone(DEFAULTS);
+const ACCENTS = ["#fb923c", "#f43f5e", "#fbbf24", "#4ade80", "#22d3ee", "#60a5fa", "#a78bfa", "#e7e5e4"];
+
+function deepMerge(base, over) {
+  if (!over || typeof over !== "object") return base;
+  for (const k of Object.keys(base)) {
+    if (!(k in over)) continue;
+    const b = base[k], o = over[k];
+    if (b && typeof b === "object" && !Array.isArray(b)) base[k] = deepMerge(b, o);
+    else if (typeof o === typeof b) base[k] = o;
+  }
+  return base;
+}
+function loadState() {
+  let raw = null;
+  try { raw = HOST ? window.__BOOT : JSON.parse(localStorage.getItem("fx_settings") || "null"); } catch {}
+  if (typeof raw === "string") try { raw = JSON.parse(raw); } catch { raw = null; }
+  S = deepMerge(structuredClone(DEFAULTS), raw || {});
+  // newly-discovered default values fill in for still-unknown materials
+  for (const m of MATS) if (!(+S.per4[m.id] > 0) && m.def > 0) S.per4[m.id] = m.def;
+}
+let saveT = null;
+function saveState() {
+  clearTimeout(saveT);
+  saveT = setTimeout(flushSave, 250);
+}
+function flushSave() {
+  clearTimeout(saveT);
+  const data = JSON.stringify(S);
+  if (HOST) send("save", { data });
+  else try { localStorage.setItem("fx_settings", data); } catch {}
+}
+
+// ============================================================
+// Audio engine (synthesized WebAudio)
+// ============================================================
+let AC = null;
+function ac() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); return AC; }
+function vol(cat = "ui") {
+  if (S.muted) return 0;
+  const c = (cat === "forge" ? S.volForge : S.volUI) / 100;
+  return ((S.volume / 100) ** 1.6) * c;
+}
+function tone({ f = 440, f2 = null, t = 0.08, type = "sine", g = 0.5, delay = 0, cat = "ui" }) {
+  if (vol(cat) <= 0) return;
+  const c = ac(), now = c.currentTime + delay;
+  const o = c.createOscillator(), gn = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, now);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, now + t);
+  gn.gain.setValueAtTime(0, now);
+  gn.gain.linearRampToValueAtTime(g * vol(cat), now + 0.008);
+  gn.gain.exponentialRampToValueAtTime(0.0001, now + t);
+  o.connect(gn).connect(c.destination);
+  o.start(now); o.stop(now + t + 0.05);
+}
+function noiseBurst({ t = 0.12, g = 0.3, fc = 3000, q = 1, delay = 0, cat = "ui" }) {
+  if (vol(cat) <= 0) return;
+  const c = ac(), now = c.currentTime + delay;
+  const len = Math.floor(c.sampleRate * t);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+  const src = c.createBufferSource(); src.buffer = buf;
+  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = fc; bp.Q.value = q;
+  const gn = c.createGain(); gn.gain.value = g * vol(cat);
+  src.connect(bp).connect(gn).connect(c.destination);
+  src.start(now);
+}
+function anvilHit(delay = 0, pitch = 1, g = 1) {
+  noiseBurst({ t: .06, g: .5 * g, fc: 5200, q: .8, cat: "forge", delay });
+  tone({ f: 1855 * pitch, t: .45, type: "triangle", g: .26 * g, cat: "forge", delay });
+  tone({ f: 2489 * pitch, t: .32, type: "triangle", g: .16 * g, cat: "forge", delay: delay + .004 });
+  tone({ f: 3322 * pitch, t: .22, type: "sine", g: .09 * g, cat: "forge", delay: delay + .004 });
+  tone({ f: 1247 * pitch, t: .6, type: "sine", g: .08 * g, cat: "forge", delay });
+  tone({ f: 140, f2: 70, t: .12, type: "sine", g: .35 * g, cat: "forge", delay });
+}
+const SFX = {
+  click:  () => tone({ f: 660, f2: 520, t: .06, type: "triangle", g: .25 }),
+  tick:   () => tone({ f: 900, f2: 760, t: .035, type: "triangle", g: .14 }),
+  tab:    () => tone({ f: 740, f2: 880, t: .05, g: .18 }),
+  open:   () => tone({ f: 440, f2: 660, t: .12, g: .2 }),
+  close:  () => tone({ f: 660, f2: 440, t: .1, g: .2 }),
+  error:  () => tone({ f: 180, f2: 140, t: .14, type: "square", g: .12 }),
+  select: () => { tone({ f: 520, f2: 780, t: .09, type: "triangle", g: .28 }); tone({ f: 1040, t: .05, g: .12, delay: .05 }); },
+  pop:    () => tone({ f: 300, f2: 500, t: .05, type: "triangle", g: .2 }),
+  forge:  () => { anvilHit(0, 1, 1); },
+  forge3: () => { anvilHit(0, 1, .7); anvilHit(.16, 1.02, .8); anvilHit(.34, .98, 1); },
+  levelup:() => { anvilHit(0, 1, .7); [784, 988, 1175, 1568].forEach((f, i) => tone({ f, t: .28, g: .2, delay: .12 + i * .08, cat: "forge" })); },
+};
+
+// ============================================================
+// Appearance
+// ============================================================
+function hexLum(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+  return .2126 * r + .7152 * g + .0722 * b;
+}
+function applyAppearance() {
+  const b = document.body;
+  b.classList.toggle("theme-dark", S.theme === "dark");
+  b.classList.toggle("theme-light", S.theme === "light");
+  b.classList.toggle("glow-off", !S.glow);
+  b.classList.toggle("no-anim", !S.anim);
+  const r = document.documentElement.style;
+  r.setProperty("--accent", S.accent);
+  r.setProperty("--on-accent", hexLum(S.accent) > .42 ? "#1a1208" : "#ffffff");
+  r.setProperty("--panel-alpha", (S.panelOpacity / 100).toFixed(2));
+  r.setProperty("--brightness", (S.brightness / 100).toFixed(2));
+  $("#app").style.zoom = S.zoom / 100;
+}
+const applyWindowOpacity = () => send("opacity", { value: S.windowOpacity / 100 });
+
+// ============================================================
+// Number animation
+// ============================================================
+const animState = new WeakMap();
+function animNum(el, to, fmtFn = fmt) {
+  if (!el) return;
+  const from = animState.get(el) ?? to;
+  animState.set(el, to);
+  if (!S.anim || from === to) { el.textContent = fmtFn(to); return; }
+  const t0 = performance.now(), dur = 420;
+  const step = now => {
+    if (animState.get(el) !== to) return;
+    const k = Math.min(1, (now - t0) / dur), e = 1 - (1 - k) ** 3;
+    el.textContent = fmtFn(from + (to - from) * e);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ============================================================
+// Inputs
+// ============================================================
+const parseNum = v => { const n = parseInt(String(v).replace(/[^\d]/g, ""), 10); return isNaN(n) ? 0 : n; };
+function getPath(p) { return p.split(".").reduce((o, k) => o[k], S); }
+function setPath(p, v) { const ks = p.split("."); const last = ks.pop(); ks.reduce((o, k) => o[k], S)[last] = v; }
+
+// level steppers: <div class="num" data-bind="need.lv">
+const STEPPERS = {};
+function buildStepper(el, { min, max, onChange, step = 1 }) {
+  const path = el.dataset.bind;
+  el.innerHTML = `<button class="lvl-btn" data-d="-1" title="Decrease">${ICON.minus}</button>
+    <input class="inp" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <button class="lvl-btn" data-d="1" title="Increase">${ICON.plus}</button>`;
+  const inp = el.querySelector("input");
+  const st = { el, inp, path, min, max };
+  STEPPERS[path] = st;
+  const commit = (v, sound = true) => {
+    const lo = typeof st.min === "function" ? st.min() : st.min;
+    const hi = typeof st.max === "function" ? st.max() : st.max;
+    const nv = Math.max(lo, Math.min(hi, v));
+    if (nv !== getPath(path)) {
+      setPath(path, nv);
+      if (sound) SFX.tick();
+      inp.classList.remove("tick"); void inp.offsetWidth; inp.classList.add("tick");
+      onChange?.();
+    } else if (sound && v !== nv) SFX.error();
+    syncStepper(st);
+  };
+  el.querySelectorAll(".lvl-btn").forEach(b => b.onclick = () => {
+    const v = getPath(path), d = +b.dataset.d;
+    commit(step > 1 ? (d > 0 ? Math.floor(v / step) * step + step : Math.ceil(v / step) * step - step) : v + d);
+  });
+  inp.addEventListener("change", () => commit(parseNum(inp.value)));
+  inp.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp") { e.preventDefault(); commit(getPath(path) + 1); }
+    if (e.key === "ArrowDown") { e.preventDefault(); commit(getPath(path) - 1); }
+    if (e.key === "Enter") { commit(parseNum(inp.value)); inp.blur(); }
+  });
+  el.addEventListener("wheel", e => { e.preventDefault(); commit(getPath(path) + (e.deltaY < 0 ? step : -step)); }, { passive: false });
+  syncStepper(st);
+  return st;
+}
+function syncStepper(st) {
+  const v = getPath(st.path);
+  const lo = typeof st.min === "function" ? st.min() : st.min;
+  const hi = typeof st.max === "function" ? st.max() : st.max;
+  if (document.activeElement !== st.inp) st.inp.value = v;
+  st.el.querySelector('[data-d="-1"]').disabled = v <= lo;
+  st.el.querySelector('[data-d="1"]').disabled = v >= hi;
+}
+
+// XP-in-level text field, with live formatting
+function bindXp(inp, getLv, path, onChange) {
+  const clampXp = v => Math.max(0, Math.min(Math.max(0, xpToNext(getLv()) - 1), v));
+  inp.addEventListener("input", () => {
+    const raw = parseNum(inp.value);
+    const v = clampXp(raw);
+    inp.classList.toggle("bad", raw !== v && inp.value.trim() !== "");
+    setPath(path, v); onChange?.();
+  });
+  inp.addEventListener("blur", () => { inp.classList.remove("bad"); inp.value = fmt(getPath(path)); });
+  inp.addEventListener("focus", () => { inp.value = getPath(path) || ""; inp.select(); });
+  inp.addEventListener("wheel", e => {
+    e.preventDefault();
+    const stepSz = Math.max(1, Math.round(xpToNext(getLv()) / 100));
+    setPath(path, clampXp(getPath(path) + (e.deltaY < 0 ? stepSz : -stepSz)));
+    inp.value = document.activeElement === inp ? getPath(path) : fmt(getPath(path));
+    onChange?.();
+  }, { passive: false });
+  return () => {
+    setPath(path, clampXp(getPath(path)));
+    if (document.activeElement !== inp) inp.value = fmt(getPath(path));
+    const lvNeed = xpToNext(getLv());
+    inp.disabled = lvNeed === 0;
+    if (lvNeed === 0) inp.value = "MAX";
+  };
+}
+
+// ============================================================
+// Materials Needed
+// ============================================================
+let syncNeedXp;
+function renderNeedMats() {
+  const box = $("#need-mats");
+  if (box.contains(document.activeElement)) return;
+  box.innerHTML = MATS.map((m, i) => {
+    const p = per4(m.id), known = p > 0;
+    return `<div class="mat ${known ? "" : "unknown"} ${S.need.mat === m.id ? "selected" : ""} ${box.dataset.ready ? "no-in" : ""}" data-id="${m.id}" style="--mc:${m.c};animation-delay:${i * 30}ms">
+      ${matIcon(m.id)}
+      <div class="m-txt"><span class="m-name">${m.name}</span>
+        <span class="m-sub">${known ? `${fmt(p)} XP per 4` : "XP unknown — enter it"}${lockBadge(m.id, S.need.lv, S.need.target)}</span></div>
+      <div class="m-right">
+        ${known ? `<span class="m-each"><b>${fmt(p / 4)}</b> each</span><span class="radio"></span>`
+                : `<input class="set-inline" data-set="${m.id}" placeholder="XP per 4" inputmode="numeric">`}
+      </div>
+    </div>`;
+  }).join("");
+  box.dataset.ready = "1";
+  box.querySelectorAll(".mat").forEach(el => el.onclick = e => {
+    if (e.target.closest("input")) return;
+    const id = el.dataset.id;
+    if (per4(id) <= 0) { SFX.error(); el.querySelector("input")?.focus(); return; }
+    if (S.need.mat === id) return;
+    S.need.mat = id; SFX.select(); saveState();
+    renderNeed();
+  });
+  box.querySelectorAll(".set-inline").forEach(inp => {
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });
+    inp.addEventListener("change", () => {
+      const v = parseNum(inp.value);
+      if (v > 0) { S.per4[inp.dataset.set] = v; saveState(); SFX.select(); toast(`${MAT[inp.dataset.set].name}: ${fmt(v)} XP per 4`); refreshAll(); }
+    });
+  });
+}
+
+function renderNeed() {
+  const N = S.need;
+  N.lv = Math.max(1, Math.min(MAX_LEVEL - 1, N.lv));
+  N.target = Math.max(N.lv + 1, Math.min(MAX_LEVEL, N.target));
+  if (per4(N.mat) <= 0) N.mat = MATS.find(m => per4(m.id) > 0)?.id || "steel";
+  syncNeedXp?.();
+  Object.values(STEPPERS).forEach(syncStepper);
+
+  const need = xpToNext(N.lv);
+  $("#need-xp-of").textContent = `/ ${fmt(need)}`;
+  $("#need-xp-bar").style.width = `${need ? (N.xp / need) * 100 : 100}%`;
+
+  const startT = totalAt(N.lv, N.xp), endT = totalAt(N.target, 0);
+  const xp = endT - startT;
+  const m = MAT[N.mat];
+  const u = unlockOf(N.mat);
+  // the selected material is used once it unlocks; before that, the best unlocked one
+  const route = planRoute(startT, endT, L => (L >= u ? N.mat : bestAt(L, N.mat)));
+  const selStep = route.steps.find(st => st.id === N.mat);
+  const items = u >= N.target ? 0 : (selStep ? selStep.crafts * 4 : 0);
+  const partial = u > N.lv;
+  const banner = $("#need-banner");
+  if (u >= N.target) {
+    banner.className = "banner never";
+    banner.innerHTML = `${LOCK_SVG}<span><b>${m.name}</b> unlocks at <b>Lv ${u}</b>${u >= MAX_LEVEL ? " (max level) — it can't be used for levelling" : ` — past your target of Lv ${N.target}`}.</span>`;
+  } else if (partial) {
+    banner.className = "banner soon";
+    banner.innerHTML = `${LOCK_SVG}<span><b>${m.name}</b> unlocks at <b>Lv ${u}</b> — covers Lv ${u} → ${N.target}. Lv ${N.lv} → ${u} needs other materials first.</span>`;
+  } else banner.className = "banner hidden";
+  const iconBox = $("#need-res-icon");
+  if (iconBox.dataset.id !== N.mat) { iconBox.innerHTML = matIcon(N.mat, "lg"); iconBox.dataset.id = N.mat; }
+  $("#need-res-label").textContent = partial && u < N.target ? `${m.name} needed · Lv ${u} → ${N.target}` : `${m.name} needed`;
+  $("#need-unit").textContent = items === 1 ? m.name.toLowerCase() : m.name.toLowerCase();
+  animNum($("#need-count"), items ?? 0);
+  const over = Math.max(0, route.cur - endT);
+  $("#need-sub").innerHTML = `Level <b>${N.lv}</b>${N.xp ? ` (+${fmt(N.xp)} XP)` : ""} → <b>${N.target}</b> · ${fmt(per4(N.mat) / 4)} XP per ${m.name.toLowerCase()}`;
+  animNum($("#need-st-xp"), xp);
+  $("#need-st-lv").textContent = `+${N.target - N.lv} level${N.target - N.lv === 1 ? "" : "s"}`;
+  animNum($("#need-st-crafts"), items / 4);
+  $("#need-st-over").textContent = route.stuck ? "—" : `${fmt(over)} XP`;
+
+  // full route (shown whenever more than one material is involved)
+  const rbox = $("#need-route");
+  const fast = planRoute(startT, endT, L => bestAt(L));
+  const totalCrafts = fast.steps.reduce((t, st) => t + st.crafts, 0);
+  rbox.querySelector(".sub-h").innerHTML = `Fastest route <span class="h-note">${fmt(totalCrafts)} crafts · ${fmt(totalCrafts * 4)} items</span>`;
+  {
+    rbox.classList.remove("hidden");
+    rbox.querySelector(".route-list").innerHTML = fast.steps.map(st => `<div class="alt route-step ${st.id === N.mat ? "sel" : ""}">${matIcon(st.id, "sm")}<span>${MAT[st.id].name}</span>
+        <span class="r-lv">Lv ${st.fromL} → ${st.toL}</span><span class="a-n">${fmt(st.crafts * 4)}</span><span class="a-u">${fmt(st.crafts)} crafts</span></div>`).join("")
+      + (fast.stuck ? `<div class="res-sub warn">No unlocked material with a known XP value at Lv ${levelFromTotal(fast.cur).lv}.</div>` : "");
+  }
+
+  const tot = CUM[MAX_LEVEL];
+  const a = totalAt(N.lv, N.xp) / tot * 100, b = totalAt(N.target, 0) / tot * 100;
+  $("#need-journey .j-done").style.width = `${a}%`;
+  const go = $("#need-journey .j-go");
+  go.style.left = `${a}%`; go.style.width = `${Math.max(.6, b - a)}%`;
+  $("#need-journey .j-labels").innerHTML = `<span>Lv 1</span><span>${(totalAt(N.lv, N.xp) / tot * 100).toFixed(1)}% → ${(b).toFixed(1)}% of max</span><span>Lv 35</span>`;
+
+  $("#need-alt").innerHTML = MATS.filter(x => x.id !== N.mat).map(x => {
+    const ux = unlockOf(x.id);
+    if (per4(x.id) <= 0) return `<div class="alt dim" data-id="${x.id}">${matIcon(x.id, "sm")}<span>${x.name}</span><span class="a-n">?</span><span class="a-u">unknown</span></div>`;
+    if (ux >= N.target) return `<div class="alt dim" data-id="${x.id}">${matIcon(x.id, "sm")}<span>${x.name}</span>${lockBadge(x.id, N.lv, N.target)}<span class="a-n">—</span><span class="a-u">locked</span></div>`;
+    const from = Math.max(startT, CUM[ux]);
+    const n = itemsFor(endT - from, x.id);
+    return `<div class="alt" data-id="${x.id}">${matIcon(x.id, "sm")}<span>${x.name}</span>${ux > N.lv ? lockBadge(x.id, N.lv, N.target) : ""}
+      <span class="a-n">${fmt(n)}</span><span class="a-u">${ux > N.lv ? `Lv ${ux} → ${N.target}` : `${fmt(n / 4)} crafts`}</span></div>`;
+  }).join("");
+  $$("#need-alt .alt").forEach(el => el.onclick = () => {
+    if (per4(el.dataset.id) <= 0) { SFX.error(); return; }
+    S.need.mat = el.dataset.id; SFX.select(); saveState(); renderNeed();
+  });
+
+  renderNeedMats();
+  if (!$("#need-bd").classList.contains("hidden")) renderBreakdown();
+  if (activeTab === "table") renderTable();
+}
+
+function renderBreakdown() {
+  const N = S.need;
+  let cum = 0, cumSel = 0, rows = "";
+  for (let L = N.lv; L < N.target; L++) {
+    let x = xpToNext(L); if (L === N.lv) x -= N.xp;
+    cum += x;
+    rows += `<tr><td><span class="lvl-pill">${L} <span class="arrow">→</span> ${L + 1}</span></td>
+      <td class="r">${fmt(x)}</td><td class="r">${fmt(cum)}</td>
+      <td class="r">${usableAt(N.mat, L) ? fmt(craftsFor(cumSel += x, N.mat) ?? 0) : `<span class="lock soon">${LOCK_SVG}Lv ${unlockOf(N.mat)}</span>`}</td><td class="r"><b>${usableAt(N.mat, L) ? fmt(itemsFor(cumSel, N.mat) ?? 0) : "—"}</b></td></tr>`;
+  }
+  const nm = MAT[N.mat].name;
+  $("#need-bd").innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>Level</th><th class="r">XP this level</th><th class="r">Cumulative XP</th><th class="r">Crafts (total)</th><th class="r">${nm} (total)</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+// ============================================================
+// Level Projection
+// ============================================================
+let syncProjXp;
+function renderProjMats() {
+  $("#proj-mats").innerHTML = MATS.map((m, i) => {
+    const p = per4(m.id);
+    return `<div class="inv ${p > 0 ? "" : "unknown"}" data-id="${m.id}" style="--mc:${m.c};animation-delay:${i * 30}ms">
+      ${matIcon(m.id)}
+      <div class="m-txt"><div class="m-name">${m.name}</div><div class="m-sub">${p > 0 ? `${fmt(p / 4)} XP each` : "XP unknown"}<span class="lb" data-lb="${m.id}"></span></div></div>
+      <div class="num" data-bind="proj.counts.${m.id}"></div>
+      <div class="q"><button class="qchip" data-q="4">+4</button><button class="qchip" data-q="16">+16</button><button class="qchip" data-q="64">+64</button></div>
+      <div class="contrib" data-c="${m.id}"></div>
+    </div>`;
+  }).join("");
+  $$("#proj-mats .num").forEach(el => buildStepper(el, { min: 0, max: 9999999, step: 4, onChange: () => { saveState(); renderProj(); } }));
+  $$("#proj-mats .inv").forEach(row => row.querySelectorAll(".qchip").forEach(b => b.onclick = () => {
+    const id = row.dataset.id;
+    S.proj.counts[id] = Math.min(9999999, (S.proj.counts[id] || 0) + +b.dataset.q);
+    SFX.pop(); saveState(); renderProj();
+  }));
+}
+
+function renderProj() {
+  const P = S.proj;
+  P.lv = Math.max(1, Math.min(MAX_LEVEL, P.lv));
+  syncProjXp?.();
+  Object.values(STEPPERS).forEach(syncStepper);
+  const need0 = xpToNext(P.lv);
+  $("#proj-xp-of").textContent = need0 ? `/ ${fmt(need0)}` : "";
+  $("#proj-xp-bar").style.width = `${need0 ? (P.xp / need0) * 100 : 100}%`;
+
+  // use every material as soon as it's unlocked; materials unlock as you level from the others
+  const start = totalAt(P.lv, P.xp);
+  const used = Object.fromEntries(MATS.map(m => [m.id, false]));
+  let cur = start, changed = true;
+  while (changed) {
+    changed = false;
+    const L = levelFromTotal(cur).lv;
+    for (const m of MATS) {
+      if (used[m.id] || !usableAt(m.id, L) || !(P.counts[m.id] > 0)) continue;
+      used[m.id] = true; changed = true;
+      cur += xpFromItems(P.counts[m.id], m.id);
+    }
+  }
+  let gained = 0;
+  const parts = [];
+  for (const m of MATS) {
+    const n = P.counts[m.id] || 0, x = used[m.id] ? xpFromItems(n, m.id) : 0;
+    gained += x;
+    if (x > 0) parts.push({ m, x });
+    const c = $(`.contrib[data-c="${m.id}"]`);
+    const lockedOut = n > 0 && per4(m.id) > 0 && !used[m.id];
+    if (c) c.innerHTML = per4(m.id) <= 0 ? "?" : !n ? "—"
+      : lockedOut ? `<span class="spare">${LOCK_SVG} unused<br>needs Lv ${unlockOf(m.id)}</span>`
+      : `<b>+${fmt(x)}</b> XP${n % 4 ? `<br><span class="spare">${n % 4} spare</span>` : ""}`;
+    c?.closest(".inv").classList.toggle("has", n > 0 && !lockedOut);
+    c?.closest(".inv").classList.toggle("locked-out", lockedOut);
+    const lb = $(`[data-lb="${m.id}"]`);
+    if (lb) lb.innerHTML = lockBadge(m.id, P.lv);
+  }
+  const end = start + gained;
+  const { lv, rem } = levelFromTotal(end);
+  const atMax = lv >= MAX_LEVEL;
+  const need = xpToNext(lv);
+
+  animNum($("#proj-lv"), lv);
+  const frac = atMax ? 1 : rem / need;
+  $("#proj-ring").style.strokeDashoffset = (326.7 * (1 - frac)).toFixed(1);
+  const d = lv - P.lv, g = $("#proj-gain");
+  g.className = "gain" + (atMax ? " max" : d ? "" : " none");
+  g.textContent = atMax ? "MAX LEVEL" : d ? `+${d} level${d === 1 ? "" : "s"}` : "No level-up yet";
+  $("#proj-into").innerHTML = atMax
+    ? `${rem > 0 ? `<span class="warn">${fmt(rem)} XP over max (wasted)</span><br>` : ""}Needed only <b>${fmt(CUM[MAX_LEVEL] - start)}</b> XP to cap.`
+    : `<b>${fmt(rem)}</b> / ${fmt(need)} XP into level ${lv}<br>${(frac * 100).toFixed(1)}% to level ${lv + 1}`;
+  animNum($("#proj-st-gain"), gained);
+  animNum($("#proj-st-total"), Math.min(end, CUM[MAX_LEVEL] + (atMax ? rem : 0)));
+
+  $("#proj-mix").innerHTML = parts.length
+    ? `<div class="mix-bar">${parts.map(p => `<i style="flex-grow:${p.x};background:${p.m.c}"></i>`).join("")}</div>
+       <div class="mix-legend">${parts.map(p => `<span><i style="background:${p.m.c}"></i>${p.m.name} ${(p.x / gained * 100).toFixed(0)}%</span>`).join("")}</div>`
+    : `<div class="res-sub">Add some materials on the left to see where they'll take you.</div>`;
+
+  if (atMax) {
+    $("#proj-next-h").textContent = "Maxed out";
+    $("#proj-next").innerHTML = "";
+  } else {
+    const toNext = need - rem;
+    $("#proj-next-h").textContent = `To level ${lv + 1} — ${fmt(toNext)} XP more`;
+    $("#proj-next").innerHTML = MATS.map(m => {
+      const n = itemsFor(toNext, m.id);
+      if (n != null && !usableAt(m.id, lv)) return `<div class="alt dim">${matIcon(m.id, "sm")}<span>${m.name}</span>${lockBadge(m.id, lv)}<span class="a-n">—</span><span class="a-u">locked</span></div>`;
+      return `<div class="alt ${n == null ? "dim" : ""}">${matIcon(m.id, "sm")}<span>${m.name}</span><span class="a-n">${n == null ? "?" : fmt(n)}</span><span class="a-u">${n == null ? "unknown" : "more"}</span></div>`;
+    }).join("");
+  }
+}
+
+// ============================================================
+// XP Table
+// ============================================================
+function renderTable() {
+  const N = S.need, m = MAT[N.mat];
+  const maxX = xpToNext(MAX_LEVEL - 1);
+  let rows = "";
+  for (let L = 1; L < MAX_LEVEL; L++) {
+    const x = xpToNext(L);
+    const inR = L >= N.lv && L < N.target;
+    const unl = MATS.filter(mm => unlockOf(mm.id) === L && L > 1).map(mm => `<span class="unl" style="--mc:${mm.c}">${matIcon(mm.id, "sm")}${mm.name} unlocks</span>`).join("");
+    const tag = (L === N.lv ? "start" : L === N.target - 1 ? "target" : "") + unl;
+    rows += `<tr data-l="${L}" class="${inR ? "in-range" : ""}">
+      <td><span class="lvl-pill">${L} <span class="arrow">→</span> ${L + 1}</span></td>
+      <td class="r">${fmt(x)}</td>
+      <td><span class="minibar"><i style="width:${(x / maxX * 100).toFixed(1)}%"></i></span></td>
+      <td class="r">${fmt(CUM[L + 1])}</td>
+      <td class="r dimc">${itemsFor(x, N.mat) == null ? "?" : usableAt(N.mat, L) ? fmt(itemsFor(x, N.mat)) : `<span class="lock soon">${LOCK_SVG}Lv ${unlockOf(N.mat)}</span>`}</td>
+      <td class="tag">${tag}</td></tr>`;
+  }
+  const t = $("#xp-table");
+  t.innerHTML = `<thead><tr><th>Level</th><th class="r">XP to next</th><th></th><th class="r">Total from Lv 1</th><th class="r">${m.name} to next</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  t.querySelectorAll("tbody tr").forEach(tr => tr.onclick = e => {
+    const L = +tr.dataset.l;
+    if (e.shiftKey) { S.need.lv = L; S.need.xp = 0; if (S.need.target <= L) S.need.target = L + 1; toast(`Start set to level ${L}`); }
+    else { S.need.target = L + 1; if (S.need.lv > L) { S.need.lv = L; S.need.xp = 0; } toast(`Target set to level ${L + 1}`); }
+    SFX.select(); saveState(); renderNeed(); renderTable();
+    const r = $(`#xp-table tr[data-l="${L}"]`); r?.classList.add("flash");
+  });
+}
+
+// ============================================================
+// Tabs, toast, sparks
+// ============================================================
+let activeTab = "needed";
+function switchTab(t, silent) {
+  if (!["needed", "proj", "table"].includes(t)) t = "needed";
+  const changed = t !== activeTab;
+  activeTab = t; S.tab = t;
+  $$(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
+  ["needed", "proj", "table"].forEach(v => {
+    const el = $(`#view-${v}`);
+    el.classList.toggle("hidden", v !== t);
+    if (v === t && changed) { el.classList.remove("entering"); void el.offsetWidth; el.classList.add("entering"); }
+  });
+  if (t === "table") renderTable();
+  if (!silent && changed) { SFX.tab(); saveState(); }
+}
+
+let toastT = null;
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg; el.classList.remove("hidden", "hiding");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.classList.add("hiding"); setTimeout(() => el.classList.add("hidden"), 300); }, 1800);
+}
+
+function sparksAt(el, count = 22) {
+  if (!S.anim || !el) return;
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const host = $("#sparks");
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement("i");
+    s.className = "spark";
+    const a = -Math.PI / 2 + (Math.random() - .5) * Math.PI * 1.4;
+    const d = 40 + Math.random() * 90;
+    s.style.left = cx + "px"; s.style.top = cy + "px";
+    s.style.setProperty("--x", `${Math.cos(a) * d}px`);
+    s.style.setProperty("--y", `${Math.sin(a) * d + 40 + Math.random() * 40}px`);
+    s.style.setProperty("--d", `${.45 + Math.random() * .5}s`);
+    const sz = 2 + Math.random() * 3; s.style.width = s.style.height = sz + "px";
+    host.appendChild(s);
+    setTimeout(() => s.remove(), 1000);
+  }
+}
+function strike(card, iconEl, sound) {
+  sound();
+  card.classList.remove("struck"); void card.offsetWidth; card.classList.add("struck");
+  sparksAt(iconEl);
+}
+
+// ============================================================
+// Settings drawer
+// ============================================================
+function renderSettingsPanel() {
+  const set = (id, v, valId, suffix = "%") => { $(id).value = v; if (valId) $(valId).textContent = `${v}${suffix}`; };
+  set("#set-volume", S.volume, "#val-volume");
+  set("#set-vol-ui", S.volUI, "#val-vol-ui");
+  set("#set-vol-forge", S.volForge, "#val-vol-forge");
+  $("#set-mute").checked = S.muted;
+  $("#theme-dark").classList.toggle("active", S.theme === "dark");
+  $("#theme-light").classList.toggle("active", S.theme === "light");
+  $("#set-accent").value = S.accent;
+  set("#set-brightness", S.brightness, "#val-brightness");
+  set("#set-panel-opacity", S.panelOpacity, "#val-panel-opacity");
+  set("#set-window-opacity", S.windowOpacity, "#val-window-opacity");
+  set("#set-zoom", S.zoom, "#val-zoom");
+  $("#set-glow").checked = S.glow;
+  $("#set-anim").checked = S.anim;
+  $("#set-pin").checked = S.pinned;
+  $("#swatches").innerHTML = ACCENTS.map(c => `<button class="sw ${c.toLowerCase() === S.accent.toLowerCase() ? "active" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+  $$("#swatches .sw").forEach(b => b.onclick = () => { S.accent = b.dataset.c; applyAppearance(); renderSettingsPanel(); SFX.click(); saveState(); });
+  $("#set-mats").innerHTML = MATS.map(m => `<div class="set-mat">${matIcon(m.id, "sm")}<span class="sm-name">${m.name}</span>
+    <label class="sm-lv" title="Level this material unlocks at">Lv<input class="set-inline lvin" data-u="${m.id}" value="${unlockOf(m.id)}" inputmode="numeric"></label>
+    <input class="set-inline" data-m="${m.id}" value="${per4(m.id) || ""}" placeholder="unknown" inputmode="numeric">
+    <span class="sm-each">${per4(m.id) ? `${fmt(per4(m.id) / 4)} each` : "—"}</span></div>`).join("");
+  $$("#set-mats .set-inline").forEach(inp => {
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });
+    inp.addEventListener("change", () => {
+      if (inp.dataset.u) S.unlock[inp.dataset.u] = Math.max(1, Math.min(MAX_LEVEL, parseNum(inp.value) || 1));
+      else S.per4[inp.dataset.m] = parseNum(inp.value);
+      saveState(); SFX.click(); refreshAll(); renderSettingsPanel();
+    });
+  });
+}
+function openSettings() { renderSettingsPanel(); $("#settings").classList.remove("hidden", "closing"); $("#settings-scrim").classList.remove("hidden"); SFX.open(); }
+function closeSettings() {
+  const s = $("#settings");
+  if (s.classList.contains("hidden")) return;
+  s.classList.add("closing"); SFX.close();
+  $("#settings-scrim").classList.add("hidden");
+  setTimeout(() => s.classList.add("hidden"), S.anim ? 240 : 0);
+}
+function setPinned(v) {
+  S.pinned = v;
+  $("#btn-pin").classList.toggle("pinned", v);
+  send("pin", { value: v });
+  saveState();
+}
+
+function refreshAll() {
+  renderNeedMats(); renderNeed(); renderProjMats(); renderProj();
+  if (activeTab === "table") renderTable();
+}
+
+// called by the host
+window.__onMaximized = v => document.body.classList.toggle("maximized", !!v);
+
+// ============================================================
+// Wire up
+// ============================================================
+window.addEventListener("DOMContentLoaded", () => {
+  loadState();
+  applyAppearance();
+
+  // window controls
+  $("#btn-close").onclick = () => { SFX.close(); flushSave(); setTimeout(() => { if (HOST) send("close"); else window.close(); }, 60); };
+  $("#btn-min").onclick = () => { SFX.click(); send("min"); };
+  $("#btn-max").onclick = () => { SFX.click(); send("max"); };
+  $("#btn-pin").onclick = () => { setPinned(!S.pinned); SFX.click(); toast(S.pinned ? "Always on top: on" : "Always on top: off"); };
+  $("#titlebar").addEventListener("mousedown", e => {
+    if (e.button !== 0 || e.target.closest("button, input")) return;
+    if (e.detail === 2) { send("max"); return; }
+    send("drag");
+  });
+  $$(".grip").forEach(g => g.addEventListener("mousedown", e => { e.preventDefault(); send("resize", { dir: g.dataset.dir }); }));
+
+  $$(".tab").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+  // Needed
+  buildStepper($('[data-bind="need.lv"]'), { min: 1, max: MAX_LEVEL - 1, onChange: () => { if (S.need.target <= S.need.lv) S.need.target = S.need.lv + 1; saveState(); renderNeed(); } });
+  buildStepper($('[data-bind="need.target"]'), { min: () => S.need.lv + 1, max: MAX_LEVEL, onChange: () => { saveState(); renderNeed(); } });
+  syncNeedXp = bindXp($("#need-xp"), () => S.need.lv, "need.xp", () => { saveState(); renderNeed(); });
+  $$("#view-needed .quick .qchip").forEach(b => b.onclick = () => {
+    const a = b.dataset.add;
+    S.need.target = a === "max" ? MAX_LEVEL : Math.min(MAX_LEVEL, S.need.lv + +a);
+    SFX.pop(); saveState(); renderNeed();
+  });
+  $("#need-calc").onclick = () => strike($("#need-result"), $("#need-res-icon"), SFX.forge3);
+  $("#need-bd-toggle").onclick = e => {
+    const body = $("#need-bd"), open = body.classList.toggle("hidden") === false;
+    e.currentTarget.classList.toggle("open", open);
+    if (open) renderBreakdown();
+    open ? SFX.open() : SFX.close();
+  };
+
+  // Projection
+  buildStepper($('[data-bind="proj.lv"]'), { min: 1, max: MAX_LEVEL, onChange: () => { saveState(); renderProj(); } });
+  syncProjXp = bindXp($("#proj-xp"), () => S.proj.lv, "proj.xp", () => { saveState(); renderProj(); });
+  $("#proj-clear").onclick = () => { MATS.forEach(m => S.proj.counts[m.id] = 0); SFX.close(); saveState(); renderProj(); };
+  $("#proj-calc").onclick = () => {
+    const before = S.proj.lv, { lv } = levelFromTotal(totalAt(S.proj.lv, S.proj.xp) + MATS.reduce((a, m) => a + xpFromItems(S.proj.counts[m.id] || 0, m.id), 0));
+    strike($("#proj-result"), $(".ring"), lv > before ? SFX.levelup : SFX.forge);
+  };
+
+  // Settings
+  $("#btn-settings").onclick = () => $("#settings").classList.contains("hidden") ? openSettings() : closeSettings();
+  $("#settings-close").onclick = closeSettings;
+  $("#settings-scrim").onclick = closeSettings;
+  const slider = (id, key, valId, after) => {
+    $(id).oninput = e => { S[key] = +e.target.value; $(valId).textContent = `${S[key]}%`; after?.(); saveState(); };
+  };
+  slider("#set-volume", "volume", "#val-volume"); $("#set-volume").onchange = () => SFX.select();
+  slider("#set-vol-ui", "volUI", "#val-vol-ui"); $("#set-vol-ui").onchange = () => SFX.click();
+  slider("#set-vol-forge", "volForge", "#val-vol-forge"); $("#set-vol-forge").onchange = () => SFX.forge();
+  slider("#set-brightness", "brightness", "#val-brightness", applyAppearance);
+  slider("#set-panel-opacity", "panelOpacity", "#val-panel-opacity", applyAppearance);
+  slider("#set-window-opacity", "windowOpacity", "#val-window-opacity", applyWindowOpacity);
+  slider("#set-zoom", "zoom", "#val-zoom");
+  $("#set-zoom").onchange = () => { applyAppearance(); SFX.click(); };
+  $("#set-mute").onchange = e => { S.muted = e.target.checked; saveState(); if (!S.muted) SFX.click(); };
+  $("#theme-dark").onclick = () => { S.theme = "dark"; applyAppearance(); renderSettingsPanel(); SFX.click(); saveState(); };
+  $("#theme-light").onclick = () => { S.theme = "light"; applyAppearance(); renderSettingsPanel(); SFX.click(); saveState(); };
+  $("#set-accent").oninput = e => { S.accent = e.target.value; applyAppearance(); saveState(); };
+  $("#set-accent").onchange = () => renderSettingsPanel();
+  $("#set-glow").onchange = e => { S.glow = e.target.checked; applyAppearance(); SFX.click(); saveState(); };
+  $("#set-anim").onchange = e => { S.anim = e.target.checked; applyAppearance(); SFX.click(); saveState(); };
+  $("#set-pin").onchange = e => { setPinned(e.target.checked); SFX.click(); };
+  $("#btn-fit").onclick = () => { send("fit"); SFX.click(); toast("Window fitted to screen"); };
+  $("#btn-reset-mats").onclick = () => { S.per4 = structuredClone(DEFAULTS.per4); S.unlock = structuredClone(DEFAULTS.unlock); saveState(); refreshAll(); renderSettingsPanel(); SFX.click(); toast("Material XP reset"); };
+  $("#btn-reset-all").onclick = () => {
+    const keep = { need: S.need, proj: S.proj, per4: S.per4, tab: S.tab };
+    S = { ...structuredClone(DEFAULTS), ...keep };
+    applyAppearance(); applyWindowOpacity(); setPinned(false); renderSettingsPanel(); refreshAll(); SFX.click(); toast("Settings reset");
+  };
+
+  window.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeSettings();
+    if (e.ctrlKey && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); switchTab(["needed", "proj", "table"][+e.key - 1]); }
+    if (e.ctrlKey && e.key === ",") { e.preventDefault(); $("#btn-settings").click(); }
+    if (e.key === "Enter" && !e.target.closest("input")) {
+      if (activeTab === "needed") $("#need-calc").click();
+      if (activeTab === "proj") $("#proj-calc").click();
+    }
+  });
+  window.addEventListener("beforeunload", flushSave);
+
+  renderNeedMats(); renderProjMats();
+  renderNeed(); renderProj();
+  switchTab(S.tab, true);
+  $("#btn-pin").classList.toggle("pinned", S.pinned);
+  if (S.pinned) send("pin", { value: true });
+  applyWindowOpacity();
+  requestAnimationFrame(() => send("ready"));
+});
