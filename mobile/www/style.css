@@ -484,3 +484,32 @@ label.row > span:first-child { flex: 1; }
   .sw { width: auto; height: auto; flex: 1 1 0; aspect-ratio: 1; max-width: 34px; }
   .scroll { padding-left: 10px; padding-right: 10px; }
 }
+
+/* ---------- theoretical mode ---------- */
+.theo-toggle {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; margin-right: 6px;
+  border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background .2s, color .2s, border-color .2s, box-shadow .2s, transform .12s;
+}
+.theo-toggle:hover { background: var(--panel-2); color: var(--text); }
+.theo-toggle:active { transform: scale(.95); }
+.theo-toggle.on {
+  color: #d8c8ff; border-color: color-mix(in srgb, #a78bfa 70%, transparent);
+  background: color-mix(in srgb, #a78bfa 18%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, #a78bfa 14%, transparent), 0 0 18px color-mix(in srgb, #a78bfa 30%, transparent);
+}
+.theme-light .theo-toggle.on { color: #5b3fc4; }
+.theo-toggle.on svg { animation: theo-bub 1.6s ease-in-out infinite; }
+@keyframes theo-bub { 50% { transform: translateY(-1px) rotate(-6deg); } }
+.theo .result { border-color: color-mix(in srgb, #a78bfa 45%, var(--border)); }
+.theo .result::before {
+  content: "THEORETICAL · no level cap"; align-self: flex-start;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; color: #c4b0ff;
+  padding: 3px 8px; border-radius: 99px; border: 1px solid color-mix(in srgb, #a78bfa 50%, transparent);
+  background: color-mix(in srgb, #a78bfa 12%, transparent);
+}
+.theme-light.theo .result::before { color: #5b3fc4; }
+
+.topbar .theo-toggle { margin: 0 0 0 auto; height: 36px; padding: 0 12px; font-size: .78em; }
+@media (max-width: 370px) { .topbar .theo-toggle .tt-label { display: none; } .topbar .theo-toggle { width: 38px; padding: 0; justify-content: center; } }
