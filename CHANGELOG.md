@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to the Forging XP Calculator, split by platform.
+Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
 ## [1.1.1] — 2026-10-28

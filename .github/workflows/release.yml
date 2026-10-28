@@ -1,9 +1,14 @@
 name: Release
 
-# Push a tag like v1.2.0 to build both apps and publish them as a GitHub Release.
+# Publishes a GitHub Release with both apps. Triggers:
+#  - add a new "## [x.y.z]" section at the top of CHANGELOG.md and push to main
+#  - push a tag like v1.2.0
+#  - Actions -> Release -> Run workflow
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    paths: [CHANGELOG.md, .github/workflows/release.yml]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,7 +19,29 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      skip: ${{ steps.v.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then TAG="$INPUT_TAG"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then TAG="${GITHUB_REF_NAME}"
+          else TAG="v$(grep -m1 -oP '^## \[\K[0-9][^\]]*' CHANGELOG.md)"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - nothing to do."; echo "skip=true" >> "$GITHUB_OUTPUT"
+          else echo "Will publish $TAG"; echo "skip=false" >> "$GITHUB_OUTPUT"; fi
+
   windows:
+    needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -32,6 +59,8 @@ jobs:
           path: desktop/target/release/ForgingXpCalculator.exe
 
   android:
+    needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -60,13 +89,13 @@ jobs:
           path: mobile/android/ForgingXP.apk
 
   release:
-    needs: [windows, android]
+    needs: [version, windows, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Release notes from CHANGELOG.md
         env:
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
           V="${TAG#v}"
           awk -v hdr="## [$V]" 'index($0, "## [")==1 { p = (index($0, hdr)==1); next } p' CHANGELOG.md > section.md
@@ -86,8 +115,9 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Forging XP Calculator ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Forging XP Calculator ${{ needs.version.outputs.tag }}
           files: |
             dist/ForgingXpCalculator.exe
             dist/ForgingXP.apk
