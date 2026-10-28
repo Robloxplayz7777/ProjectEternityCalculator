@@ -13,14 +13,17 @@ const fmt = n => Math.round(n).toLocaleString("en-US");
 // ============================================================
 // XP curve  (skill stat: floor((1500 + 400n + 40n²) × 3.4), n = L − 1)
 // ============================================================
-const MAX_LEVEL = 35;
+const GAME_CAP = 35;          // real in-game max level
+const THEO_CAP = 500;         // theoretical mode: formula continues past 35
+let MAX_LEVEL = GAME_CAP;
+let THEO = false;             // never persisted: every launch starts with the real cap
+const rawXp = L => { const n = L - 1; return Math.floor((1500 + 400 * n + 40 * n * n) * 34 / 10); };
 function xpToNext(L) {
   if (L < 1 || L >= MAX_LEVEL) return 0;
-  const n = L - 1;
-  return Math.floor((1500 + 400 * n + 40 * n * n) * 34 / 10);
+  return rawXp(L);
 }
 const CUM = [0, 0]; // CUM[L] = total XP from Lv1 to reach L
-for (let L = 1; L < MAX_LEVEL; L++) CUM[L + 1] = CUM[L] + xpToNext(L);
+for (let L = 1; L < THEO_CAP; L++) CUM[L + 1] = CUM[L] + rawXp(L);
 const totalAt = (L, xp) => CUM[Math.min(Math.max(L, 1), MAX_LEVEL)] + xp;
 function levelFromTotal(t) {
   let L = 1;
@@ -44,7 +47,7 @@ const per4 = id => +S.per4[id] || 0;
 const craftsFor = (xp, id) => per4(id) > 0 ? Math.ceil(Math.max(0, xp) / per4(id)) : null;
 const itemsFor = (xp, id) => { const c = craftsFor(xp, id); return c == null ? null : c * 4; };
 const xpFromItems = (n, id) => Math.floor(n / 4) * per4(id);   // leftover (n % 4) gives nothing
-const unlockOf = id => Math.max(1, Math.min(MAX_LEVEL, +S.unlock[id] || 1));
+const unlockOf = id => Math.max(1, Math.min(GAME_CAP, +S.unlock[id] || 1));
 const usableAt = (id, L) => per4(id) > 0 && unlockOf(id) <= L;
 const LOCK_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
 // badge describing when a material becomes usable, relative to level L
@@ -429,12 +432,13 @@ function renderNeed() {
       + (fast.stuck ? `<div class="res-sub warn">No unlocked material with a known XP value at Lv ${levelFromTotal(fast.cur).lv}.</div>` : "");
   }
 
-  const tot = CUM[MAX_LEVEL];
+  const scaleTop = THEO ? Math.max(GAME_CAP, N.target) : MAX_LEVEL;
+  const tot = CUM[scaleTop];
   const a = totalAt(N.lv, N.xp) / tot * 100, b = totalAt(N.target, 0) / tot * 100;
   $("#need-journey .j-done").style.width = `${a}%`;
   const go = $("#need-journey .j-go");
   go.style.left = `${a}%`; go.style.width = `${Math.max(.6, b - a)}%`;
-  $("#need-journey .j-labels").innerHTML = `<span>Lv 1</span><span>${(totalAt(N.lv, N.xp) / tot * 100).toFixed(1)}% → ${(b).toFixed(1)}% of max</span><span>Lv 35</span>`;
+  $("#need-journey .j-labels").innerHTML = `<span>Lv 1</span><span>${(totalAt(N.lv, N.xp) / tot * 100).toFixed(1)}% → ${(b).toFixed(1)}% of ${THEO ? `Lv ${scaleTop}` : "max"}</span><span>Lv ${scaleTop}</span>`;
 
   $("#need-alt").innerHTML = MATS.filter(x => x.id !== N.mat).map(x => {
     const ux = unlockOf(x.id);
@@ -573,9 +577,10 @@ function renderProj() {
 // ============================================================
 function renderTable() {
   const N = S.need, m = MAT[N.mat];
-  const maxX = xpToNext(MAX_LEVEL - 1);
+  const maxX = xpToNext((THEO ? Math.min(THEO_CAP, Math.max(50, N.target + 10)) : MAX_LEVEL) - 1);
   let rows = "";
-  for (let L = 1; L < MAX_LEVEL; L++) {
+  const rowsTo = THEO ? Math.min(THEO_CAP, Math.max(50, N.target + 10)) : MAX_LEVEL;
+  for (let L = 1; L < rowsTo; L++) {
     const x = xpToNext(L);
     const inR = L >= N.lv && L < N.target;
     const unl = MATS.filter(mm => unlockOf(mm.id) === L && L > 1).map(mm => `<span class="unl" style="--mc:${mm.c}">${matIcon(mm.id, "sm")}${mm.name} unlocks</span>`).join("");
@@ -679,7 +684,7 @@ function renderSettingsPanel() {
   $$("#set-mats .set-inline").forEach(inp => {
     inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });
     inp.addEventListener("change", () => {
-      if (inp.dataset.u) S.unlock[inp.dataset.u] = Math.max(1, Math.min(MAX_LEVEL, parseNum(inp.value) || 1));
+      if (inp.dataset.u) S.unlock[inp.dataset.u] = Math.max(1, Math.min(GAME_CAP, parseNum(inp.value) || 1));
       else S.per4[inp.dataset.m] = parseNum(inp.value);
       saveState(); SFX.click(); refreshAll(); renderSettingsPanel();
     });
@@ -705,6 +710,33 @@ function refreshAll() {
   if (activeTab === "table") renderTable();
 }
 
+// ============================================================
+// Theoretical mode (lifts the Lv 35 cap; off on every launch)
+// ============================================================
+function setTheo(on, quiet) {
+  THEO = !!on;
+  MAX_LEVEL = THEO ? THEO_CAP : GAME_CAP;
+  document.body.classList.toggle("theo", THEO);
+  const btn = $("#btn-theo");
+  btn.classList.toggle("on", THEO);
+  btn.setAttribute("aria-pressed", THEO);
+  btn.querySelector(".tt-label").textContent = THEO ? "Theoretical · no cap" : "Theoretical";
+  const mx = $('.qchip[data-add="max"]'); if (mx) mx.textContent = THEO ? "+25" : "Max";
+  if (!THEO) {   // snap everything back inside the real cap
+    S.need.lv = Math.min(S.need.lv, GAME_CAP - 1);
+    S.need.target = Math.min(S.need.target, GAME_CAP);
+    if (S.need.lv >= GAME_CAP - 1) S.need.xp = Math.min(S.need.xp, Math.max(0, xpToNext(S.need.lv) - 1));
+    S.proj.lv = Math.min(S.proj.lv, GAME_CAP);
+    if (S.proj.lv >= GAME_CAP) S.proj.xp = 0;
+  }
+  refreshAll();
+  if (activeTab === "table") renderTable();
+  if (!quiet) {
+    toast(THEO ? `Theoretical mode — level cap lifted (up to Lv ${THEO_CAP})` : "Back to the real Lv 35 cap");
+    THEO ? SFX.select() : SFX.close();
+  }
+}
+
 // called by the host
 window.__onMaximized = v => document.body.classList.toggle("maximized", !!v);
 
@@ -728,14 +760,15 @@ window.addEventListener("DOMContentLoaded", () => {
   $$(".grip").forEach(g => g.addEventListener("mousedown", e => { e.preventDefault(); send("resize", { dir: g.dataset.dir }); }));
 
   $$(".tab").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  $("#btn-theo").onclick = () => setTheo(!THEO);
 
   // Needed
-  buildStepper($('[data-bind="need.lv"]'), { min: 1, max: MAX_LEVEL - 1, onChange: () => { if (S.need.target <= S.need.lv) S.need.target = S.need.lv + 1; saveState(); renderNeed(); } });
-  buildStepper($('[data-bind="need.target"]'), { min: () => S.need.lv + 1, max: MAX_LEVEL, onChange: () => { saveState(); renderNeed(); } });
+  buildStepper($('[data-bind="need.lv"]'), { min: 1, max: () => MAX_LEVEL - 1, onChange: () => { if (S.need.target <= S.need.lv) S.need.target = S.need.lv + 1; saveState(); renderNeed(); } });
+  buildStepper($('[data-bind="need.target"]'), { min: () => S.need.lv + 1, max: () => MAX_LEVEL, onChange: () => { saveState(); renderNeed(); } });
   syncNeedXp = bindXp($("#need-xp"), () => S.need.lv, "need.xp", () => { saveState(); renderNeed(); });
   $$("#view-needed .quick .qchip").forEach(b => b.onclick = () => {
     const a = b.dataset.add;
-    S.need.target = a === "max" ? MAX_LEVEL : Math.min(MAX_LEVEL, S.need.lv + +a);
+    S.need.target = a === "max" ? (THEO ? Math.min(MAX_LEVEL, S.need.target + 25) : MAX_LEVEL) : Math.min(MAX_LEVEL, S.need.lv + +a);
     SFX.pop(); saveState(); renderNeed();
   });
   $("#need-calc").onclick = () => strike($("#need-result"), $("#need-res-icon"), SFX.forge3);
@@ -747,7 +780,7 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   // Projection
-  buildStepper($('[data-bind="proj.lv"]'), { min: 1, max: MAX_LEVEL, onChange: () => { saveState(); renderProj(); } });
+  buildStepper($('[data-bind="proj.lv"]'), { min: 1, max: () => MAX_LEVEL, onChange: () => { saveState(); renderProj(); } });
   syncProjXp = bindXp($("#proj-xp"), () => S.proj.lv, "proj.xp", () => { saveState(); renderProj(); });
   $("#proj-clear").onclick = () => { MATS.forEach(m => S.proj.counts[m.id] = 0); SFX.close(); saveState(); renderProj(); };
   $("#proj-calc").onclick = () => {

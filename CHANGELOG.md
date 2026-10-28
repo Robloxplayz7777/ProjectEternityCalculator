@@ -4,6 +4,16 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.2.0] — 2026-10-28
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- **New: Theoretical mode.** A flask button in the top bar lifts the real Lv 35 cap so the XP formula keeps going past 35 (up to Lv 500). Use it to plan what levels beyond the cap would cost.
+  - The button glows purple and results are tagged *THEORETICAL · no level cap* while it's on.
+  - The level boxes, the XP Table (extends past 35) and the progress bar follow the lifted cap. The target's **Max** shortcut becomes **+25**.
+  - Obsidian (unlocks at Lv 35) becomes usable past 35 in this mode once its XP value is set.
+  - Turning it off snaps everything back inside Lv 35. It always starts **off** when the app opens.
+- On phones narrower than 370 px the button shows just the flask icon.
+
 ## [1.1.1] — 2026-10-28
 
 ### 🖥️ Desktop (Windows)
