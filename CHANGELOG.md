@@ -4,6 +4,16 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.2.2] — 2026-10-29
+
+### 🖥️ Desktop (Windows)
+- Result numbers (items needed, XP, crafts, levels, "other materials", tables) can now be **selected by dragging** and copied.
+- **Click any result number to copy it**: just the digits (e.g. `2124`), with a "Copied" toast and a brief highlight. Clicking the number in an "other materials" row copies it; clicking the row's name still switches material.
+
+### 📱 Mobile (Android)
+- Result numbers can be **long-pressed to select** (with the normal Android copy menu), or **tapped to copy** instantly, with a toast and a short vibration.
+- Swiping between tabs no longer interferes while text is selected.
+
 ## [1.2.1] — 2026-10-29
 
 ### 🖥️ Desktop (Windows) and 📱 Mobile (Android)

@@ -77,6 +77,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void copy(String text) {
+            try {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Forging XP", text));
+            } catch (Exception ignored) { }
+        }
+
+        @JavascriptInterface
         public void setBars(final String status, final String nav, final boolean light) {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
