@@ -64,13 +64,27 @@ Without them the release APK is signed with a temporary key.
 
 ## How the math works
 
-Blacksmithing is a **skill stat** (like cooking and fishing), so it uses the steeper skill curve
-scaled by `XP_REQUIREMENT_MULTIPLIER = 3.4`:
-
 ```
 XP to go from level L to L+1  =  floor( (1500 + 400·n + 40·n²) × 3.4 ),   n = L − 1
 Max level 35  ·  2,640,304 total XP from level 1
 ```
+
+**Where the formula comes from:** it was derived from in-game measurements. The max XP of every
+blacksmithing level from 1 to 25 was recorded, and this formula was fitted to those values. It
+reproduces every measured value exactly. Levels 26–35, and Theoretical mode beyond 35, are
+extrapolated from the same formula. If the game ever disagrees, the in-game value is right.
+
+| Level | XP to next | Total XP from Lv 1 |
+|---|---:|---:|
+| 1 → 2 | 5,100 | 5,100 |
+| 5 → 6 | 12,716 | 43,180 |
+| 10 → 11 | 28,356 | 150,960 |
+| 15 → 16 | 50,796 | 357,340 |
+| 20 → 21 | 80,036 | 696,320 |
+| 25 → 26 | 116,076 | 1,201,900 |
+| 34 → 35 | 198,084 | 2,640,304 |
+
+The full table is in the app's **XP Table** tab.
 
 | Material | XP per 4 items | XP each | Unlocks at |
 |---|---:|---:|---:|

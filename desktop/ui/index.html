@@ -180,6 +180,7 @@
         <div class="card-title"><span class="dot"></span>Blacksmithing XP curve
           <span class="formula">floor((1500 + 400n + 40n²) × 3.4), n = level − 1</span>
         </div>
+        <p class="hint tbl-hint">Formula derived from in-game measurements of every level's max XP from Lv 1–25 (matches all of them exactly); higher levels follow the same formula.</p>
         <p class="hint tbl-hint">Click a row to set it as your <b>target</b> · Shift-click to set it as your <b>start</b>. Highlighted rows are your current range.</p>
         <div class="tbl-wrap"><table class="xp-table" id="xp-table"></table></div>
       </section>
@@ -242,7 +243,7 @@
       </section>
 
       <section class="about">
-        <p>Blacksmithing is a skill stat (with cooking &amp; fishing) — it uses the steeper skill curve scaled by XP_REQUIREMENT_MULTIPLIER = 3.4. Max level 35 (2,640,304 total XP).</p>
+        <p>XP formula: floor((1500 + 400n + 40n²) × 3.4), n = level − 1. It was derived by measuring the max XP of every blacksmithing level from 1 to 25 in-game and fitting a formula to those values; it matches all of them exactly. Levels above 25 (and theoretical mode) are extrapolated. Max level 35 (2,640,304 total XP).</p>
         <p>Shortcuts: Ctrl+1/2/3 tabs · Ctrl+, settings · Enter strike · scroll over a level to change it.</p>
       </section>
     </div>

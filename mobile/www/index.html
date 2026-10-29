@@ -154,6 +154,7 @@
           <div class="card">
             <div class="card-title"><span class="dot"></span>Blacksmithing XP curve</div>
             <div class="formula">floor((1500 + 400n + 40n²) × 3.4) · n = level − 1</div>
+            <p class="hint">Derived from in-game measurements of every level's max XP from Lv 1–25; higher levels follow the same formula.</p>
             <p class="hint">Tap a row to set your <b>target</b> · hold a row to set your <b>start</b>.</p>
             <div class="tbl-wrap"><table class="xp-table" id="xp-table"></table></div>
           </div>
@@ -199,7 +200,7 @@
           <div class="card">
             <button id="btn-reset-all" class="btn">Reset all settings</button>
             <div class="about">
-              <p>Blacksmithing is a skill stat — steeper skill curve × 3.4. Max level 35 (2,640,304 total XP). Crafts use 4 items at a time.</p>
+              <p>XP formula: floor((1500 + 400n + 40n²) × 3.4), n = level − 1. It was derived by measuring the max XP of every blacksmithing level from 1 to 25 in-game and fitting a formula to those values; it matches all of them exactly. Levels above 25 (and theoretical mode) are extrapolated. Max level 35 (2,640,304 total XP). Crafts use 4 items at a time.</p>
               <p>Swipe left/right to switch tabs. Sliders only move when you drag them sideways, so scrolling never changes a value. Hold − / + to repeat.</p>
             </div>
           </div>

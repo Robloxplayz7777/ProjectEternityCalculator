@@ -4,6 +4,12 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.2.1] — 2026-10-29
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- Documented where the XP formula comes from. It was derived by measuring the max XP of every blacksmithing level from 1 to 25 in-game and fitting a formula to those values, and it matches all of them exactly. Levels above 25 (and Theoretical mode) are extrapolated.
+  - Shown in the XP Table tab and in Settings → About, and explained in the README.
+
 ## [1.2.0] — 2026-10-28
 
 ### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
