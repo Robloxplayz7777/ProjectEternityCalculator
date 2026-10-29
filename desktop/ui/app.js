@@ -12,6 +12,9 @@ const fmt = n => Math.round(n).toLocaleString("en-US");
 
 // ============================================================
 // XP curve: XP(L) = 136L² + 1088L + 3876  (XP to go from level L to L+1)
+// Derived from in-game measurements: the max XP of every blacksmithing level from 1 to 25 was
+// recorded and this formula was fitted to them (it reproduces every measured value exactly).
+// Levels above 25 — and theoretical mode past 35 — are extrapolated from the same formula.
 // ============================================================
 const GAME_CAP = 35;          // real in-game max level
 const THEO_CAP = 500;         // theoretical mode: formula continues past 35

@@ -10,7 +10,7 @@ rm -rf assets/www && mkdir -p assets && cp -r ../www assets/www
 $BT/aapt2 compile --dir res -o build/res.zip
 $BT/aapt2 link -I "$JAR" --manifest AndroidManifest.xml -A assets \
   --java build/gen -o build/apk/unsigned.apk build/res.zip --min-sdk-version 24 --target-sdk-version 34 \
-  --version-code 4 --version-name 1.2.0
+  --version-code 5 --version-name 1.2.1
 javac -nowarn -source 8 -target 8 -bootclasspath "$JAR" -classpath "$JAR" -d build/classes \
   $(find src build/gen -name '*.java') 2>&1 | grep -v "warning: \[options\]" || true
 (cd build/classes && jar cf ../classes.jar .)
