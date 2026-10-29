@@ -565,3 +565,12 @@ td .lock { margin-left: 0; }
   background: color-mix(in srgb, #a78bfa 12%, transparent);
 }
 .theme-light.theo .result::before { color: #5b3fc4; }
+
+/* ---------- selectable / copyable numbers ---------- */
+.res-big span, .stat b, .alt .a-n, .ring-in b, #proj-into b, .res-sub b, td {
+  user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; cursor: text;
+}
+.res-big span, .stat b, .alt .a-n, .ring-in b { cursor: copy; border-radius: 5px; transition: background .2s, box-shadow .2s; }
+.copied { animation: copied .7s var(--ease); }
+@keyframes copied { 0% { background: color-mix(in srgb, var(--accent) 35%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); } 100% { background: transparent; box-shadow: 0 0 0 0 transparent; } }
+::selection { background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); }

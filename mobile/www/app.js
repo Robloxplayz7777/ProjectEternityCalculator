@@ -704,7 +704,7 @@ function setupSwipe() {
   pager.addEventListener("touchstart", e => {
     if (e.touches.length !== 1) { mode = null; return; }
     const t = e.target;
-    if (t.closest(".slider, .no-swipe") || (t.tagName === "INPUT" && t === document.activeElement)) { mode = null; return; }
+    if (String(window.getSelection?.() || "").trim() || t.closest(".slider, .no-swipe") || (t.tagName === "INPUT" && t === document.activeElement)) { mode = null; return; }
     const p = e.touches[0];
     sx = p.clientX; sy = p.clientY; st = performance.now(); mode = "pending"; dx = 0; W = pager.clientWidth;
   }, { passive: true });
@@ -865,6 +865,43 @@ function setTheo(on, quiet) {
   }
 }
 
+
+// ============================================================
+// Copyable numbers: drag/long-press to select, or click/tap a number to copy it
+// ============================================================
+const COPY_SEL = ".res-big span, .stat b, .alt .a-n, .ring-in b";
+function copyText(t) {
+  try { if (window.Android && window.Android.copy) { window.Android.copy(t); return true; } } catch {}
+  try { navigator.clipboard?.writeText(t).catch(() => {}); } catch {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;opacity:0;left:-9999px";
+    document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  } catch {}
+  return true;
+}
+function setupCopy() {
+  document.addEventListener("click", e => {
+    const el = e.target.closest(COPY_SEL);
+    if (!el) return;
+    const sel = String(window.getSelection?.() || "");
+    if (sel.trim()) return;                       // user is selecting text — leave it alone
+    const shown = el.textContent.trim();
+    const raw = shown.replace(/[^\d.]/g, "").replace(/^\./, "");
+    if (!/\d/.test(raw)) return;
+    e.stopPropagation(); e.preventDefault();      // don't also trigger the row's own click
+    copyText(raw);
+    el.classList.remove("copied"); void el.offsetWidth; el.classList.add("copied");
+    toast(`Copied ${shown}`);
+    try { SFX.pop(); } catch {}
+    try { typeof buzz === "function" && buzz(10); } catch {}
+  }, true);
+  // titles for discoverability
+  const tag = () => document.querySelectorAll(COPY_SEL).forEach(el => { if (!el.title) el.title = "Click to copy · drag to select"; });
+  new MutationObserver(tag).observe(document.body, { childList: true, subtree: true });
+  tag();
+}
+
 // Android back button
 window.__onBack = () => {
   if (document.activeElement && document.activeElement.tagName === "INPUT") { document.activeElement.blur(); return true; }
@@ -947,6 +984,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   $("#pager").addEventListener("scroll", e => { e.currentTarget.scrollLeft = 0; });
   setupTapGuard();
+  setupCopy();
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
   // unlock audio on the first touch
   window.addEventListener("pointerdown", () => { try { ac(); } catch {} }, { once: true });
