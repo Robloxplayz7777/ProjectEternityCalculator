@@ -44,15 +44,16 @@ Without them the release APK is signed with a temporary key.
 ## Features
 
 - **Materials Needed**: pick a start level (plus current XP) and a target level and see exactly how
-  many items and crafts you need, with overshoot, progress across levels 1–35, and the same goal in
+  many items and crafts you need, with overshoot, progress across levels 1–50, and the same goal in
   every other material.
 - **Fastest route**: automatically uses the best material unlocked at each stage
-  (Iron → Steel → Kobold → Crystalite).
+  (Iron → Steel → Kobold → Crystalite → Obsidian → Verdite).
 - **Level Projection**: enter what you have (one material or several) and see the level you'll
   reach, progress into it, each material's share of the XP, and what you need for the next level.
   Materials that aren't unlocked yet are only used once you reach their level.
 - **XP Table**: the full curve. Click or tap a row to set your target, Shift-click or hold to set
   your start.
+- **Theoretical mode**: a toggle in the top bar that lifts the Lv 50 cap so the formula keeps going (up to Lv 500). It's off every time the app starts.
 - **Crafting-accurate rounding**: crafts consume 4 items at a time, so every count is a whole
   number of crafts (a multiple of 4), and leftover items are flagged as spare.
 - Synthesized sound effects, animations, dark/light themes, accent colours, brightness, and
@@ -66,12 +67,12 @@ Without them the release APK is signed with a temporary key.
 
 ```
 XP to go from level L to L+1  =  floor( (1500 + 400·n + 40·n²) × 3.4 ),   n = L − 1
-Max level 35  ·  2,640,304 total XP from level 1
+Max level 50  ·  7,020,524 total XP from level 1
 ```
 
 **Where the formula comes from:** it was derived from in-game measurements. The max XP of every
 blacksmithing level from 1 to 25 was recorded, and this formula was fitted to those values. It
-reproduces every measured value exactly. Levels 26–35, and Theoretical mode beyond 35, are
+reproduces every measured value exactly. Levels 26–50, and Theoretical mode beyond 50, are
 extrapolated from the same formula. If the game ever disagrees, the in-game value is right.
 
 | Level | XP to next | Total XP from Lv 1 |
@@ -83,6 +84,9 @@ extrapolated from the same formula. If the game ever disagrees, the in-game valu
 | 20 → 21 | 80,036 | 696,320 |
 | 25 → 26 | 116,076 | 1,201,900 |
 | 34 → 35 | 198,084 | 2,640,304 |
+| 40 → 41 | 264,996 | 4,058,240 |
+| 45 → 46 | 328,236 | 5,570,220 |
+| 49 → 50 | 383,724 | 7,020,524 |
 
 The full table is in the app's **XP Table** tab.
 
@@ -91,8 +95,9 @@ The full table is in the app's **XP Table** tab.
 | Iron | 320 | 80 | Lv 1 |
 | Steel | 1,120 | 280 | Lv 6 |
 | Kobold | 2,560 | 640 | Lv 15 |
-| Crystalite | 4,160 | 1,040 | Lv 25 |
-| Obsidian | unknown | — | Lv 35 (max) |
+| Crystalite | 3,806 | 951.5 | Lv 25 |
+| Obsidian | 5,875 | 1,468.75 | Lv 35 |
+| Verdite | 8,105 | 2,026.25 | Lv 45 |
 
 All values (XP and unlock levels) can be edited in **Settings** if the game changes them.
 

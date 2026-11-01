@@ -9,6 +9,7 @@ const send = (cmd, extra = {}) => { if (HOST) try { window.ipc.postMessage(JSON.
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const fmt = n => Math.round(n).toLocaleString("en-US");
+const fmtEach = v => v.toLocaleString("en-US", { maximumFractionDigits: 2 });   // per-item XP (may be fractional)
 
 // ============================================================
 // XP curve: floor((1500 + 400n + 40n²) × 3.4), n = L − 1
@@ -16,8 +17,8 @@ const fmt = n => Math.round(n).toLocaleString("en-US");
 // recorded and this formula was fitted to them (it reproduces every measured value exactly).
 // Levels above 25 — and theoretical mode past 35 — are extrapolated from the same formula.
 // ============================================================
-const GAME_CAP = 35;          // real in-game max level
-const THEO_CAP = 500;         // theoretical mode: formula continues past 35
+const GAME_CAP = 50;          // real in-game max level
+const THEO_CAP = 500;         // theoretical mode: formula continues past the real cap
 let MAX_LEVEL = GAME_CAP;
 let THEO = false;             // never persisted: every launch starts with the real cap
 const rawXp = L => { const n = L - 1; return Math.floor((1500 + 400 * n + 40 * n * n) * 34 / 10); };
@@ -41,8 +42,9 @@ const MATS = [
   { id: "iron",       name: "Iron",       lv: 1,  def: 320,  c: "#b9bec7", c2: "#7d838d", shape: "ingot" },
   { id: "steel",      name: "Steel",      lv: 6,  def: 1120, c: "#8fb4d9", c2: "#4f6f91", shape: "ingot" },
   { id: "kobold",     name: "Kobold",     lv: 15, def: 2560, c: "#e8bf5a", c2: "#a67a1e", shape: "ingot" },
-  { id: "crystalite", name: "Crystalite", lv: 25, def: 4160, c: "#7ff0f0", c2: "#2aa5b8", shape: "crystal" },
-  { id: "obsidian",   name: "Obsidian",   lv: 35, def: 0,    c: "#9b6df0", c2: "#3b2569", shape: "shard" },
+  { id: "crystalite", name: "Crystalite", lv: 25, def: 3806, c: "#7ff0f0", c2: "#2aa5b8", shape: "crystal" },
+  { id: "obsidian",   name: "Obsidian",   lv: 35, def: 5875, c: "#9b6df0", c2: "#3b2569", shape: "shard" },
+  { id: "verdite",    name: "Verdite",    lv: 45, def: 8105, c: "#5fe39a", c2: "#1e7a48", shape: "ingot" },
 ];
 const MAT = Object.fromEntries(MATS.map(m => [m.id, m]));
 const per4 = id => +S.per4[id] || 0;
@@ -153,6 +155,7 @@ function loadState() {
   if (typeof raw === "string") try { raw = JSON.parse(raw); } catch { raw = null; }
   S = deepMerge(structuredClone(DEFAULTS), raw || {});
   // newly-discovered default values fill in for still-unknown materials
+  if (+S.per4.crystalite === 4160) S.per4.crystalite = 3806;   // v1.3: Crystalite rebalanced (old default 4160)
   for (const m of MATS) if (!(+S.per4[m.id] > 0) && m.def > 0) S.per4[m.id] = m.def;
 }
 let saveT = null;
@@ -359,7 +362,7 @@ function renderNeedMats() {
       <div class="m-txt"><span class="m-name">${m.name}</span>
         <span class="m-sub">${known ? `${fmt(p)} XP per 4` : "XP unknown — enter it"}${lockBadge(m.id, S.need.lv, S.need.target)}</span></div>
       <div class="m-right">
-        ${known ? `<span class="m-each"><b>${fmt(p / 4)}</b> each</span><span class="radio"></span>`
+        ${known ? `<span class="m-each"><b>${fmtEach(p / 4)}</b> each</span><span class="radio"></span>`
                 : `<input class="set-inline" data-set="${m.id}" placeholder="XP per 4" inputmode="numeric">`}
       </div>
     </div>`;
@@ -417,7 +420,7 @@ function renderNeed() {
   $("#need-unit").textContent = items === 1 ? m.name.toLowerCase() : m.name.toLowerCase();
   animNum($("#need-count"), items ?? 0);
   const over = Math.max(0, route.cur - endT);
-  $("#need-sub").innerHTML = `Level <b>${N.lv}</b>${N.xp ? ` (+${fmt(N.xp)} XP)` : ""} → <b>${N.target}</b> · ${fmt(per4(N.mat) / 4)} XP per ${m.name.toLowerCase()}`;
+  $("#need-sub").innerHTML = `Level <b>${N.lv}</b>${N.xp ? ` (+${fmt(N.xp)} XP)` : ""} → <b>${N.target}</b> · ${fmtEach(per4(N.mat) / 4)} XP per ${m.name.toLowerCase()}`;
   animNum($("#need-st-xp"), xp);
   $("#need-st-lv").textContent = `+${N.target - N.lv} level${N.target - N.lv === 1 ? "" : "s"}`;
   animNum($("#need-st-crafts"), items / 4);
@@ -487,7 +490,7 @@ function renderProjMats() {
     const p = per4(m.id);
     return `<div class="inv ${p > 0 ? "" : "unknown"}" data-id="${m.id}" style="--mc:${m.c};animation-delay:${i * 30}ms">
       ${matIcon(m.id)}
-      <div class="m-txt"><div class="m-name">${m.name}</div><div class="m-sub">${p > 0 ? `${fmt(p / 4)} XP each` : "XP unknown"}<span class="lb" data-lb="${m.id}"></span></div></div>
+      <div class="m-txt"><div class="m-name">${m.name}</div><div class="m-sub">${p > 0 ? `${fmtEach(p / 4)} XP each` : "XP unknown"}<span class="lb" data-lb="${m.id}"></span></div></div>
       <div class="num" data-bind="proj.counts.${m.id}"></div>
       <div class="q"><button class="qchip" data-q="4">+4</button><button class="qchip" data-q="16">+16</button><button class="qchip" data-q="64">+64</button></div>
       <div class="contrib" data-c="${m.id}"></div>
@@ -683,7 +686,7 @@ function renderSettingsPanel() {
   $("#set-mats").innerHTML = MATS.map(m => `<div class="set-mat">${matIcon(m.id, "sm")}<span class="sm-name">${m.name}</span>
     <label class="sm-lv" title="Level this material unlocks at">Lv<input class="set-inline lvin" data-u="${m.id}" value="${unlockOf(m.id)}" inputmode="numeric"></label>
     <input class="set-inline" data-m="${m.id}" value="${per4(m.id) || ""}" placeholder="unknown" inputmode="numeric">
-    <span class="sm-each">${per4(m.id) ? `${fmt(per4(m.id) / 4)} each` : "—"}</span></div>`).join("");
+    <span class="sm-each">${per4(m.id) ? `${fmtEach(per4(m.id) / 4)} each` : "—"}</span></div>`).join("");
   $$("#set-mats .set-inline").forEach(inp => {
     inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });
     inp.addEventListener("change", () => {
@@ -735,7 +738,7 @@ function setTheo(on, quiet) {
   refreshAll();
   if (activeTab === "table") renderTable();
   if (!quiet) {
-    toast(THEO ? `Theoretical mode — level cap lifted (up to Lv ${THEO_CAP})` : "Back to the real Lv 35 cap");
+    toast(THEO ? `Theoretical mode — level cap lifted (up to Lv ${THEO_CAP})` : `Back to the real Lv ${GAME_CAP} cap`);
     THEO ? SFX.select() : SFX.close();
   }
 }
