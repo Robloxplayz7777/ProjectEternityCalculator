@@ -4,6 +4,16 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.3.0] — 2026-11-01
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- **Max level raised to 50** (was 35). Level 1 → 50 is 7,020,524 XP in total. The level boxes, XP Table, progress bar and Max shortcut all follow the new cap. Theoretical mode now lifts the Lv 50 cap.
+- **New material: Verdite.** Unlocks at Lv 45, 8,105 XP per craft of 4 (2,026.25 each).
+- **Obsidian has a value now:** 5,875 XP per craft of 4 (1,468.75 each). Unlocks at Lv 35 and is now a normal levelling material (it used to be max-level only).
+- **Crystalite rebalanced:** 4,160 → 3,806 XP per craft of 4 (951.5 each). If you still had the old 4,160 saved, it updates automatically. Values you entered yourself are kept.
+- The fastest route now continues Crystalite → **Obsidian (Lv 35)** → **Verdite (Lv 45)**.
+- Per-item XP shows decimals where needed (e.g. 951.5 each). Counts still round up to whole crafts of 4.
+
 ## [1.2.2] — 2026-10-29
 
 ### 🖥️ Desktop (Windows)
