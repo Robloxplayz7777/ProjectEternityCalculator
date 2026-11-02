@@ -4,6 +4,20 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.4.0] — 2026-11-02
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- **In-app updates.** On launch, the app checks GitHub for a newer release and shows a card with what's new. One click updates: Windows downloads the new version and restarts, Android downloads the APK and opens the installer. You can choose *Later*, *Skip this version*, or turn it off in **Settings → Updates**, which also has *Check for updates* and shows your version.
+- **Rebalanced ores** (XP per craft of 4): Iron 320 → **276**, Steel 1,120 → **729**, Kobold 2,560 → **1,992**. Old default values update automatically; values you typed in yourself are kept.
+- **Fastest route: include / exclude ores.** Every ore is listed with a button. Red **−** excludes it (the row goes dark) and the route is recalculated without it. Green **+** brings it back. Your choice is saved.
+- **Verdite** has a richer emerald-green ingot.
+
+### 📱 Mobile (Android)
+- Unlock badges inside list rows are now compact, so material names aren't cut off on narrow phones.
+- Needs two new permissions for updates: internet (to check for releases) and installing packages (to install the downloaded update).
+
+> **Note:** builds before 1.4.0 can't update themselves. Install 1.4.0 manually once; from then on, updates come in-app.
+
 ## [1.3.0] — 2026-11-01
 
 ### 🖥️ Desktop (Windows) and 📱 Mobile (Android)

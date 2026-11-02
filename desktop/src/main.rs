@@ -26,6 +26,83 @@ const MIN_H: f64 = 460.0;
 enum UserEvent {
     Ipc(String),
     ShowFallback,
+    UpdateDone(Result<PathBuf, String>),
+}
+
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// ---------- self-updater (Windows) ----------
+// Downloads the new .exe next to the current one, swaps them (a running .exe can be renamed,
+// just not deleted), restarts, and cleans up the old copy on the next launch.
+mod updater {
+    use std::path::{Path, PathBuf};
+
+    #[cfg(windows)]
+    #[link(name = "urlmon")]
+    extern "system" {
+        fn URLDownloadToFileW(caller: *mut core::ffi::c_void, url: *const u16, file: *const u16, reserved: u32, cb: *mut core::ffi::c_void) -> i32;
+    }
+    #[cfg(windows)]
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(hwnd: isize, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
+    }
+    fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain([0]).collect() }
+
+    pub fn current_exe() -> Result<PathBuf, String> {
+        std::env::current_exe().map_err(|e| e.to_string())
+    }
+    fn old_path(exe: &Path) -> PathBuf { exe.with_extension("old") }
+    fn new_path(exe: &Path) -> PathBuf { exe.with_extension("new") }
+
+    /// remove the previous version left behind by an update
+    pub fn cleanup() {
+        if let Ok(exe) = current_exe() {
+            let _ = std::fs::remove_file(old_path(&exe));
+            let _ = std::fs::remove_file(new_path(&exe));
+        }
+    }
+
+    pub fn download(url: &str) -> Result<PathBuf, String> {
+        let exe = current_exe()?;
+        let dest = new_path(&exe);
+        let _ = std::fs::remove_file(&dest);
+        #[cfg(windows)]
+        {
+            let sep = if url.contains('?') { '&' } else { '?' };
+            let busted = format!("{url}{sep}cb={}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+            let hr = unsafe { URLDownloadToFileW(std::ptr::null_mut(), wide(&busted).as_ptr(), wide(&dest.to_string_lossy()).as_ptr(), 0, std::ptr::null_mut()) };
+            if hr != 0 { return Err(format!("Download failed (error 0x{:08X}). Check your connection.", hr as u32)); }
+        }
+        #[cfg(not(windows))]
+        { let _ = url; return Err("Updating is only supported on Windows".into()); }
+        let bytes = std::fs::read(&dest).map_err(|e| format!("Couldn't read the download: {e}"))?;
+        if bytes.len() < 100_000 || &bytes[..2] != b"MZ" {
+            let _ = std::fs::remove_file(&dest);
+            return Err("The downloaded file isn't a valid app (maybe GitHub is busy). Try again later.".into());
+        }
+        Ok(dest)
+    }
+
+    /// swap the new exe in and start it. Returns Err if the folder isn't writable.
+    pub fn install_and_restart(new_exe: &Path) -> Result<(), String> {
+        let exe = current_exe()?;
+        let old = old_path(&exe);
+        let _ = std::fs::remove_file(&old);
+        std::fs::rename(&exe, &old).map_err(|e| format!("Couldn't replace the app ({e}). Is the folder read-only?"))?;
+        if let Err(e) = std::fs::rename(new_exe, &exe) {
+            let _ = std::fs::rename(&old, &exe); // roll back
+            return Err(format!("Couldn't install the update ({e})."));
+        }
+        std::process::Command::new(&exe).spawn().map_err(|e| format!("Updated, but couldn't restart: {e}. Please start the app again."))?;
+        Ok(())
+    }
+
+    pub fn open_url(url: &str) {
+        if !(url.starts_with("https://") || url.starts_with("http://")) { return; }
+        #[cfg(windows)]
+        unsafe { ShellExecuteW(0, wide("open").as_ptr(), wide(url).as_ptr(), std::ptr::null(), std::ptr::null(), 1); }
+    }
 }
 
 fn data_dir() -> PathBuf {
@@ -215,6 +292,7 @@ fn page() -> String {
 }
 
 fn main() {
+    updater::cleanup();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy: EventLoopProxy<UserEvent> = event_loop.create_proxy();
 
@@ -247,8 +325,9 @@ fn main() {
     // ---- settings handed to the page at boot ----
     let boot = fs::read_to_string(settings_path()).unwrap_or_default();
     let boot_js = format!(
-        "window.__BOOT = {};",
-        serde_json::to_string(&boot).unwrap_or_else(|_| "\"\"".into())
+        "window.__BOOT = {}; window.__APP_VERSION = {};",
+        serde_json::to_string(&boot).unwrap_or_else(|_| "\"\"".into()),
+        serde_json::to_string(APP_VERSION).unwrap()
     );
 
     let mut ctx = WebContext::new(Some(data_dir().join("webview")));
@@ -303,6 +382,7 @@ fn main() {
 
     let mut shown = false;
     let mut was_max = false;
+    let proxy_for_updates = proxy.clone();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -317,6 +397,21 @@ fn main() {
                 if m != was_max {
                     was_max = m;
                     let _ = webview.evaluate_script(&format!("window.__onMaximized && window.__onMaximized({m})"));
+                }
+            }
+            Event::UserEvent(UserEvent::UpdateDone(res)) => {
+                let result = res.and_then(|p| updater::install_and_restart(&p));
+                match result {
+                    Ok(()) => {
+                        save_bounds(&window);
+                        *control_flow = ControlFlow::Exit;
+                    }
+                    Err(e) => {
+                        let _ = webview.evaluate_script(&format!(
+                            "window.__onUpdateError && window.__onUpdateError({})",
+                            serde_json::to_string(&e).unwrap_or_default()
+                        ));
+                    }
                 }
             }
             Event::UserEvent(UserEvent::ShowFallback) => {
@@ -387,6 +482,20 @@ fn main() {
                             .unwrap_or_else(|| primary_work_area(&window));
                         apply_bounds(&window, fit_bounds(wa, window.scale_factor()));
                         save_bounds(&window);
+                    }
+                    "update" => {
+                        if let Some(url) = v.get("url").and_then(|u| u.as_str()) {
+                            let url = url.to_string();
+                            let p = proxy_for_updates.clone();
+                            std::thread::spawn(move || {
+                                let _ = p.send_event(UserEvent::UpdateDone(updater::download(&url)));
+                            });
+                        }
+                    }
+                    "open" => {
+                        if let Some(url) = v.get("url").and_then(|u| u.as_str()) {
+                            updater::open_url(url);
+                        }
                     }
                     "save" => {
                         if let Some(d) = v.get("data").and_then(|d| d.as_str()) {

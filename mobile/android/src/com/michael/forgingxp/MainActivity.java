@@ -4,6 +4,12 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.Uri;
+import android.os.Environment;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,6 +27,8 @@ public class MainActivity extends Activity {
     private WebView web;
     private SharedPreferences prefs;
     private Vibrator vibrator;
+    private long updateDownloadId = -1;
+    private BroadcastReceiver downloadReceiver;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -53,6 +61,48 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "Android");
         setContentView(web);
         web.loadUrl("file:///android_asset/www/index.html");
+
+        // when the update APK finishes downloading, hand it to the system installer
+        downloadReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id != updateDownloadId || id == -1) return;
+                installDownloaded(id);
+            }
+        };
+        IntentFilter f = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(downloadReceiver, f, Context.RECEIVER_EXPORTED);
+        else registerReceiver(downloadReceiver, f);
+    }
+
+    private void js(final String code) {
+        runOnUiThread(new Runnable() { @Override public void run() { if (web != null) web.evaluateJavascript(code, null); } });
+    }
+
+    private void installDownloaded(long id) {
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            DownloadManager.Query q = new DownloadManager.Query().setFilterById(id);
+            android.database.Cursor cur = dm.query(q);
+            boolean ok = false;
+            if (cur != null) {
+                if (cur.moveToFirst()) {
+                    int st = cur.getInt(cur.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                    ok = st == DownloadManager.STATUS_SUCCESSFUL;
+                }
+                cur.close();
+            }
+            if (!ok) { js("window.__onUpdateError && window.__onUpdateError('The download failed. Check your connection and try again.')"); return; }
+            Uri uri = dm.getUriForDownloadedFile(id);
+            if (uri == null) { js("window.__onUpdateError && window.__onUpdateError('Couldn\\'t open the downloaded file.')"); return; }
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            js("window.__onUpdateReady && window.__onUpdateReady()");
+        } catch (Exception e) {
+            js("window.__onUpdateError && window.__onUpdateError('Couldn\\'t start the installer.')");
+        }
     }
 
     private class Bridge {
@@ -74,6 +124,38 @@ public class MainActivity extends Activity {
                     vibrator.vibrate(d);
                 }
             } catch (Exception ignored) { }
+        }
+
+        @JavascriptInterface
+        public String version() {
+            try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+            catch (Exception e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public void openUrl(String url) {
+            if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) return;
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) { }
+        }
+
+        @JavascriptInterface
+        public void downloadUpdate(String url, String ver) {
+            if (url == null || !url.startsWith("https://")) return;
+            try {
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                String name = "ForgingXP-" + ver.replaceAll("[^0-9A-Za-z.\\-]", "") + ".apk";
+                java.io.File old = new java.io.File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name);
+                if (old.exists()) old.delete();
+                DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url))
+                    .setTitle("Forging XP " + ver)
+                    .setDescription("Downloading update")
+                    .setMimeType("application/vnd.android.package-archive")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                    .setDestinationInExternalFilesDir(MainActivity.this, Environment.DIRECTORY_DOWNLOADS, name);
+                updateDownloadId = dm.enqueue(r);
+            } catch (Exception e) {
+                js("window.__onUpdateError && window.__onUpdateError('Couldn\\'t start the download.')");
+            }
         }
 
         @JavascriptInterface
@@ -137,6 +219,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try { if (downloadReceiver != null) unregisterReceiver(downloadReceiver); } catch (Exception ignored) { }
         if (web != null) { web.destroy(); web = null; }
         super.onDestroy();
     }

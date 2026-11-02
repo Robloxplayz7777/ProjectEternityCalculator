@@ -37,12 +37,12 @@ function levelFromTotal(t) {
 // Materials
 // ============================================================
 const MATS = [
-  { id: "iron",       name: "Iron",       lv: 1,  def: 320,  c: "#b9bec7", c2: "#7d838d", shape: "ingot" },
-  { id: "steel",      name: "Steel",      lv: 6,  def: 1120, c: "#8fb4d9", c2: "#4f6f91", shape: "ingot" },
-  { id: "kobold",     name: "Kobold",     lv: 15, def: 2560, c: "#e8bf5a", c2: "#a67a1e", shape: "ingot" },
+  { id: "iron",       name: "Iron",       lv: 1,  def: 276,  c: "#b9bec7", c2: "#7d838d", shape: "ingot" },
+  { id: "steel",      name: "Steel",      lv: 6,  def: 729,  c: "#8fb4d9", c2: "#4f6f91", shape: "ingot" },
+  { id: "kobold",     name: "Kobold",     lv: 15, def: 1992, c: "#e8bf5a", c2: "#a67a1e", shape: "ingot" },
   { id: "crystalite", name: "Crystalite", lv: 25, def: 3806, c: "#7ff0f0", c2: "#2aa5b8", shape: "crystal" },
   { id: "obsidian",   name: "Obsidian",   lv: 35, def: 5875, c: "#9b6df0", c2: "#3b2569", shape: "shard" },
-  { id: "verdite",    name: "Verdite",    lv: 45, def: 8105, c: "#5fe39a", c2: "#1e7a48", shape: "ingot" },
+  { id: "verdite",    name: "Verdite",    lv: 45, def: 8105, c: "#34d27b", c2: "#0d5a33", shape: "ingot" },
 ];
 const MAT = Object.fromEntries(MATS.map(m => [m.id, m]));
 const per4 = id => +S.per4[id] || 0;
@@ -57,8 +57,8 @@ function lockBadge(id, L, target = MAX_LEVEL) {
   if (u <= 1) return "";
   if (u >= MAX_LEVEL) return `<span class="lock never">${LOCK_SVG}Lv ${u} · max only</span>`;
   if (u <= L) return `<span class="lock ok">Lv ${u}+</span>`;
-  if (u >= target) return `<span class="lock never">${LOCK_SVG}Locked until Lv ${u}</span>`;
-  return `<span class="lock soon">${LOCK_SVG}Unlocks Lv ${u}</span>`;
+  if (u >= target) return `<span class="lock never">${LOCK_SVG}<span class="lw">Locked until </span>Lv ${u}</span>`;
+  return `<span class="lock soon">${LOCK_SVG}<span class="lw">Unlocks </span>Lv ${u}</span>`;
 }
 function planRoute(cur, to, pick) {
   const steps = [];
@@ -120,6 +120,8 @@ const DEFAULTS = {
   tab: "needed",
   per4: Object.fromEntries(MATS.map(m => [m.id, m.def])),
   unlock: Object.fromEntries(MATS.map(m => [m.id, m.lv])),
+  routeExclude: Object.fromEntries(MATS.map(m => [m.id, false])),
+  autoUpdate: true, skipVersion: "",
   need: { mat: "steel", lv: 1, xp: 0, target: 10 },
   proj: { lv: 1, xp: 0, counts: Object.fromEntries(MATS.map(m => [m.id, 0])) },
 };
@@ -143,7 +145,9 @@ function loadState() {
   try { raw = NATIVE ? window.Android.load() : localStorage.getItem("fx_settings"); } catch {}
   try { raw = raw ? JSON.parse(raw) : null; } catch { raw = null; }
   S = deepMerge(structuredClone(DEFAULTS), raw || {});
-  if (+S.per4.crystalite === 4160) S.per4.crystalite = 3806;   // v1.3: Crystalite rebalanced (old default 4160)
+  // game rebalances: replace old *default* values (values typed in by hand are kept)
+  const OLD_DEFAULTS = { iron: [320], steel: [1120], kobold: [2560], crystalite: [4160] };
+  for (const [id, olds] of Object.entries(OLD_DEFAULTS)) if (olds.includes(+S.per4[id])) S.per4[id] = MAT[id].def;
   for (const m of MATS) if (!(+S.per4[m.id] > 0) && m.def > 0) S.per4[m.id] = m.def;
 }
 let saveT = null;
@@ -452,6 +456,43 @@ function renderNeedMats() {
   });
 }
 
+
+// ---------- fastest route: every ore listed, each can be excluded / re-included ----------
+const RX_MINUS = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>`;
+const RX_PLUS = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg>`;
+const bestRouteAt = L => MATS.filter(m => !S.routeExclude[m.id] && usableAt(m.id, L)).sort((a, b) => per4(b.id) - per4(a.id))[0]?.id || null;
+function routeRows(fast, N, mobile) {
+  return MATS.map(m => {
+    const ex = !!S.routeExclude[m.id];
+    const st = fast.steps.find(s => s.id === m.id);
+    const btn = `<button class="rx-btn ${ex ? "add" : "rem"}" data-rx="${m.id}" title="${ex ? `Include ${m.name} in the route` : `Exclude ${m.name} from the route`}" aria-label="${ex ? "Include" : "Exclude"} ${m.name}">${ex ? RX_PLUS : RX_MINUS}</button>`;
+    let cls = "", lv = "", n = "", u = "";
+    if (ex) { cls = "excluded"; lv = "excluded"; n = "—"; }
+    else if (st) { cls = st.id === N.mat ? "sel" : ""; lv = `Lv ${st.fromL} → ${st.toL}`; n = fmt(st.crafts * 4); u = `${fmt(st.crafts)} crafts`; }
+    else {
+      cls = "idle";
+      lv = per4(m.id) <= 0 ? "XP unknown" : unlockOf(m.id) >= N.target ? `unlocks Lv ${unlockOf(m.id)}` : "not needed";
+      n = "—";
+    }
+    const name = mobile
+      ? `<span class="r-txt"><span>${m.name}</span><span class="r-lv">${lv}</span></span>`
+      : `<span>${m.name}</span><span class="r-lv">${lv}</span>`;
+    return `<div class="alt route-step ${cls}" data-id="${m.id}">${matIcon(m.id, "sm")}${name}<span class="a-n">${n}</span><span class="a-u">${u}</span>${btn}</div>`;
+  }).join("");
+}
+function setupRouteToggles() {
+  $("#need-route .route-list").addEventListener("click", e => {
+    const b = e.target.closest(".rx-btn");
+    if (!b) return;
+    e.stopPropagation(); e.preventDefault();
+    const id = b.dataset.rx;
+    S.routeExclude[id] = !S.routeExclude[id];
+    S.routeExclude[id] ? SFX.close() : SFX.select();
+    try { typeof buzz === "function" && buzz(10); } catch {}
+    saveState(); renderNeed();
+  });
+}
+
 function renderNeed() {
   const N = S.need;
   N.lv = Math.max(1, Math.min(MAX_LEVEL - 1, N.lv));
@@ -497,13 +538,11 @@ function renderNeed() {
   const go = $("#need-journey .j-go"); go.style.left = `${a}%`; go.style.width = `${Math.max(.8, b - a)}%`;
   $("#need-journey .j-labels").innerHTML = `<span>Lv 1</span><span>${a.toFixed(1)}% → ${b.toFixed(1)}% of ${THEO ? `Lv ${scaleTop}` : "max"}</span><span>Lv ${scaleTop}</span>`;
 
-  const fast = planRoute(startT, endT, L => bestAt(L));
+  const fast = planRoute(startT, endT, bestRouteAt);
   const totalCrafts = fast.steps.reduce((t, st) => t + st.crafts, 0);
   $("#need-route .sub-h").innerHTML = `Fastest route <span class="h-note">${fmt(totalCrafts)} crafts · ${fmt(totalCrafts * 4)} items</span>`;
-  $("#need-route .route-list").innerHTML = fast.steps.map(st => `<div class="alt route-step ${st.id === N.mat ? "sel" : ""}">${matIcon(st.id, "sm")}
-      <span class="r-txt"><span>${MAT[st.id].name}</span><span class="r-lv">Lv ${st.fromL} → ${st.toL}</span></span>
-      <span class="a-n">${fmt(st.crafts * 4)}</span><span class="a-u">${fmt(st.crafts)} crafts</span></div>`).join("")
-    + (fast.stuck ? `<div class="res-sub warn">No unlocked material with a known XP value at Lv ${levelFromTotal(fast.cur).lv}.</div>` : "");
+  $("#need-route .route-list").innerHTML = routeRows(fast, N, true)
+    + (fast.stuck ? `<div class="res-sub warn">No included material is unlocked at Lv ${levelFromTotal(fast.cur).lv} — tap + to include one.</div>` : "");
 
   $("#need-alt").innerHTML = MATS.filter(x => x.id !== N.mat).map(x => {
     const ux = unlockOf(x.id);
@@ -793,6 +832,7 @@ function strike(card, iconEl, sound) {
 // ============================================================
 const sliderPaint = {};
 function renderSettingsPanel() {
+  { const v = appVersion(); $("#set-version").textContent = v ? `v${v}` : "preview"; $("#set-autoupd").checked = S.autoUpdate; }
   Object.values(sliderPaint).forEach(p => p());
   $("#set-mute").checked = S.muted;
   $("#set-haptics").checked = S.haptics;
@@ -905,6 +945,109 @@ function setupCopy() {
   tag();
 }
 
+
+// ============================================================
+// Updates: check GitHub Releases on launch, one-click update
+// ============================================================
+const REPO = "Robloxplayz7777/ProjectEternityCalculator";
+const IS_MOBILE_APP = true;
+const ASSET_RE = IS_MOBILE_APP ? /\.apk$/i : /\.exe$/i;
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function appVersion() {
+  try { if (IS_MOBILE_APP) return window.Android?.version?.() || null; } catch {}
+  return window.__APP_VERSION || null;
+}
+function cmpVer(a, b) {
+  const pa = String(a).split(/[.\-+]/).map(n => parseInt(n, 10) || 0), pb = String(b).split(/[.\-+]/).map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d > 0 ? 1 : -1; }
+  return 0;
+}
+function openLink(url) {
+  if (IS_MOBILE_APP && window.Android?.openUrl) return window.Android.openUrl(url);
+  if (!IS_MOBILE_APP && typeof send === "function" && HOST) return send("open", { url });
+  window.open(url, "_blank");
+}
+function releaseNotes(body) {
+  const lines = String(body || "").split(/\r?\n/);
+  const start = Math.max(0, lines.findIndex(l => /what'?s new/i.test(l)));
+  const want = IS_MOBILE_APP ? /mobile|android/i : /desktop|windows/i;
+  const out = []; let sec = "";
+  for (const l of lines.slice(start + 1)) {
+    if (/^#{2,4}\s/.test(l)) { sec = l; continue; }
+    if (/^\s*-\s+/.test(l) && (!sec || want.test(sec))) out.push(l.replace(/^\s*-\s+/, "").replace(/\*\*|`|\*/g, "").trim());
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+let UPD = null;
+async function checkForUpdate(manual) {
+  const cur = appVersion();
+  if (!cur) { if (manual) toast("Update checks work in the installed app"); return; }
+  if (manual) toast("Checking for updates…");
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const rel = await r.json();
+    const latest = String(rel.tag_name || "").replace(/^v/i, "");
+    const asset = (rel.assets || []).find(a => ASSET_RE.test(a.name));
+    if (!latest || cmpVer(latest, cur) <= 0) { if (manual) toast(`You're up to date (v${cur})`); return; }
+    if (!asset) { if (manual) toast(`v${latest} is out, but has no ${IS_MOBILE_APP ? "Android" : "Windows"} download yet`); return; }
+    if (!manual && S.skipVersion === latest) return;
+    UPD = { ver: latest, cur, url: asset.browser_download_url, page: rel.html_url, notes: releaseNotes(rel.body) };
+    showUpdateCard();
+  } catch (e) {
+    if (manual) toast("Couldn't reach GitHub. Check your connection.");
+  }
+}
+function showUpdateCard() {
+  const c = $("#update-card"); if (!c || !UPD) return;
+  c.innerHTML = `
+    <div class="uc-head">
+      <span class="uc-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span>
+      <div class="uc-titles"><b>Update available</b><span>v${escHtml(UPD.cur)} → <em>v${escHtml(UPD.ver)}</em></span></div>
+      <button class="uc-x" data-act="later" aria-label="Later"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+    </div>
+    ${UPD.notes.length ? `<ul class="uc-notes">${UPD.notes.map(n => `<li>${escHtml(n)}</li>`).join("")}</ul>` : ""}
+    <div class="uc-msg" id="uc-msg"></div>
+    <div class="uc-btns">
+      <button class="btn primary" data-act="update">${IS_MOBILE_APP ? "Download &amp; install" : "Update &amp; restart"}</button>
+      <button class="btn" data-act="later">Later</button>
+    </div>
+    <div class="uc-links"><a data-act="notes">Release notes</a><a data-act="skip">Skip this version</a></div>`;
+  c.classList.remove("hidden", "leaving");
+  c.querySelectorAll("[data-act]").forEach(el => el.addEventListener("click", e => { e.preventDefault(); updateAction(el.dataset.act, el); }));
+  try { SFX.open(); } catch {}
+}
+function hideUpdateCard() {
+  const c = $("#update-card"); if (!c) return;
+  c.classList.add("leaving"); setTimeout(() => c.classList.add("hidden"), S.anim ? 260 : 0);
+}
+function updateAction(act, el) {
+  if (act === "later") { hideUpdateCard(); try { SFX.close(); } catch {} return; }
+  if (act === "skip") { S.skipVersion = UPD.ver; saveState(); hideUpdateCard(); toast(`Skipped v${UPD.ver}`); return; }
+  if (act === "notes") { openLink(UPD.page); return; }
+  if (act === "update") {
+    const b = el; b.disabled = true; b.innerHTML = `<span class="spin"></span>Downloading…`;
+    $("#uc-msg").textContent = IS_MOBILE_APP ? "Downloading — Android will ask you to install it." : "Downloading — the app restarts by itself when it's done.";
+    flushSave();
+    try { SFX.select(); } catch {}
+    if (IS_MOBILE_APP) {
+      try { window.Android.downloadUpdate(UPD.url, UPD.ver); } catch (e) { window.__onUpdateError(String(e)); }
+    } else if (HOST) send("update", { url: UPD.url });
+    else openLink(UPD.url);
+  }
+}
+window.__onUpdateError = msg => {
+  const b = $('#update-card [data-act="update"]');
+  if (b) { b.disabled = false; b.textContent = "Try again"; }
+  const m = $("#uc-msg"); if (m) { m.textContent = msg; m.classList.add("err"); }
+  try { SFX.error(); } catch {}
+};
+window.__onUpdateReady = () => {
+  const m = $("#uc-msg"); if (m) { m.classList.remove("err"); m.textContent = "Downloaded — confirm the install on the next screen."; }
+  const b = $('#update-card [data-act="update"]'); if (b) { b.disabled = false; b.textContent = "Install again"; }
+};
+
 // Android back button
 window.__onBack = () => {
   if (document.activeElement && document.activeElement.tagName === "INPUT") { document.activeElement.blur(); return true; }
@@ -960,7 +1103,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#theme-light").addEventListener("click", () => { S.theme = "light"; applyAppearance(); renderSettingsPanel(); SFX.click(); buzz(8); saveState(); });
   $("#set-glow").addEventListener("change", e => { S.glow = e.target.checked; applyAppearance(); SFX.click(); buzz(8); saveState(); });
   $("#set-anim").addEventListener("change", e => { S.anim = e.target.checked; applyAppearance(); SFX.click(); buzz(8); saveState(); });
-  $("#btn-reset-mats").addEventListener("click", () => { S.per4 = structuredClone(DEFAULTS.per4); S.unlock = structuredClone(DEFAULTS.unlock); saveState(); refreshAll(); renderSettingsPanel(); SFX.click(); buzz(10); toast("Materials reset"); });
+  $("#btn-reset-mats").addEventListener("click", () => { S.per4 = structuredClone(DEFAULTS.per4); S.unlock = structuredClone(DEFAULTS.unlock); S.routeExclude = structuredClone(DEFAULTS.routeExclude); saveState(); refreshAll(); renderSettingsPanel(); SFX.click(); buzz(10); toast("Materials reset"); });
   $("#btn-reset-all").addEventListener("click", () => {
     const keep = { need: S.need, proj: S.proj, per4: S.per4, unlock: S.unlock, tab: S.tab };
     S = { ...structuredClone(DEFAULTS), ...keep };
@@ -987,6 +1130,10 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   $("#pager").addEventListener("scroll", e => { e.currentTarget.scrollLeft = 0; });
   setupTapGuard();
+  $("#btn-check-upd").addEventListener("click", () => { checkForUpdate(true); });
+  $("#set-autoupd").addEventListener("change", e => { S.autoUpdate = e.target.checked; saveState(); SFX.click(); });
+  setTimeout(() => { if (S.autoUpdate) checkForUpdate(false); }, 2500);
+  setupRouteToggles();
   setupCopy();
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
   // unlock audio on the first touch
