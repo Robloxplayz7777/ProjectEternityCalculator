@@ -121,7 +121,6 @@ const DEFAULTS = {
   per4: Object.fromEntries(MATS.map(m => [m.id, m.def])),
   unlock: Object.fromEntries(MATS.map(m => [m.id, m.lv])),
   routeExclude: Object.fromEntries(MATS.map(m => [m.id, false])),
-  routePin: Object.fromEntries(MATS.map(m => [m.id, false])),
   autoUpdate: true, skipVersion: "",
   need: { mat: "steel", lv: 1, xp: 0, target: 10 },
   proj: { lv: 1, xp: 0, counts: Object.fromEntries(MATS.map(m => [m.id, 0])) },
@@ -461,38 +460,26 @@ function renderNeedMats() {
 // ---------- fastest route: every ore listed, each can be excluded / re-included ----------
 const RX_MINUS = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>`;
 const RX_PLUS = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg>`;
-// Route picking: ores you added with + ("pinned") take priority — the best pinned ore that's
-// unlocked is used. Where none of them is unlocked yet, the best non-excluded ore fills in.
-const bestRouteAt = L => {
-  const ok = MATS.filter(m => !S.routeExclude[m.id] && usableAt(m.id, L));
-  const pinned = ok.filter(m => S.routePin[m.id]);
-  return (pinned.length ? pinned : ok).sort((a, b) => per4(b.id) - per4(a.id))[0]?.id || null;
-};
-const routeCustomised = () => MATS.some(m => S.routeExclude[m.id] || S.routePin[m.id]);
+// Route picking: every ore is ON or OFF (S.routeExclude). At each level the best ON ore that's
+// unlocked is used. ON ores that a better ore outranks stay on standby.
+const bestRouteAt = L => MATS.filter(m => !S.routeExclude[m.id] && usableAt(m.id, L)).sort((a, b) => per4(b.id) - per4(a.id))[0]?.id || null;
+const routeCustomised = () => MATS.some(m => S.routeExclude[m.id]);
 function routeRows(fast, N, mobile) {
   return MATS.map(m => {
-    const ex = !!S.routeExclude[m.id], pin = !!S.routePin[m.id];
+    const off = !!S.routeExclude[m.id];
     const st = fast.steps.find(s => s.id === m.id);
-    const lockedOut = per4(m.id) <= 0 || unlockOf(m.id) >= N.target;
-    let mode;   // what the button does
-    if (ex) mode = "include";
-    else if (st) mode = "remove";
-    else mode = lockedOut ? "none" : "add";
-    const icon = mode === "remove" ? RX_MINUS : RX_PLUS;
-    const tip = { include: `Include ${m.name} again`, remove: `Remove ${m.name} from the route`, add: `Add ${m.name} to the route`, none: `${m.name} can't be used for this range` }[mode];
-    const btn = `<button class="rx-btn ${mode === "remove" ? "rem" : "add"}" data-rx="${m.id}" data-mode="${mode}" title="${tip}" aria-label="${tip}" ${mode === "none" ? "disabled" : ""}>${icon}</button>`;
-    let cls = "", lv = "", n = "", u = "";
-    if (ex) { cls = "excluded"; lv = "excluded"; n = "—"; }
-    else if (st) { cls = (st.id === N.mat ? "sel " : "") + (pin ? "pinned" : ""); lv = `Lv ${st.fromL} → ${st.toL}`; n = fmt(st.crafts * 4); u = `${fmt(st.crafts)} crafts`; }
+    const tip = off ? `Turn ${m.name} back on` : `Turn ${m.name} off (route won't use it)`;
+    const btn = `<button class="rx-btn ${off ? "add" : "rem"}" data-rx="${m.id}" title="${tip}" aria-label="${tip}">${off ? RX_PLUS : RX_MINUS}</button>`;
+    let cls = "", lv = "", n = "—", u = "";
+    if (off) { cls = "excluded"; lv = "off"; }
+    else if (st) { cls = st.id === N.mat ? "sel" : ""; lv = `Lv ${st.fromL} → ${st.toL}`; n = fmt(st.crafts * 4); u = `${fmt(st.crafts)} crafts`; }
     else {
       cls = "idle";
-      lv = per4(m.id) <= 0 ? "XP unknown" : unlockOf(m.id) >= N.target ? `unlocks Lv ${unlockOf(m.id)}` : pin ? "added · not reached" : "not needed";
-      n = "—";
+      lv = per4(m.id) <= 0 ? "XP unknown" : unlockOf(m.id) >= N.target ? `unlocks Lv ${unlockOf(m.id)}` : "standby · better ore in use";
     }
-    const tag = pin && !ex ? `<span class="pin-tag">added</span>` : "";
     const name = mobile
-      ? `<span class="r-txt"><span>${m.name}${tag}</span><span class="r-lv">${lv}</span></span>`
-      : `<span>${m.name}</span>${tag}<span class="r-lv">${lv}</span>`;
+      ? `<span class="r-txt"><span>${m.name}</span><span class="r-lv">${lv}</span></span>`
+      : `<span>${m.name}</span><span class="r-lv">${lv}</span>`;
     return `<div class="alt route-step ${cls}" data-id="${m.id}">${matIcon(m.id, "sm")}${name}<span class="a-n">${n}</span><span class="a-u">${u}</span>${btn}</div>`;
   }).join("");
 }
@@ -500,21 +487,16 @@ function setupRouteToggles() {
   $("#need-route").addEventListener("click", e => {
     if (e.target.closest(".route-reset")) {
       e.preventDefault(); e.stopPropagation();
-      MATS.forEach(m => { S.routeExclude[m.id] = false; S.routePin[m.id] = false; });
-      SFX.close(); try { typeof buzz === "function" && buzz(10); } catch {}
+      MATS.forEach(m => { S.routeExclude[m.id] = false; });
+      SFX.select(); try { typeof buzz === "function" && buzz(10); } catch {}
       saveState(); renderNeed(); return;
     }
     const b = e.target.closest(".rx-btn");
-    if (!b || b.disabled) return;
+    if (!b) return;
     e.stopPropagation(); e.preventDefault();
-    const id = b.dataset.rx, mode = b.dataset.mode;
-    if (mode === "include") { S.routeExclude[id] = false; SFX.select(); }
-    else if (mode === "add") { S.routePin[id] = true; S.routeExclude[id] = false; SFX.select(); }
-    else if (mode === "remove") {
-      if (S.routePin[id]) S.routePin[id] = false;   // added by you → back to automatic
-      else S.routeExclude[id] = true;               // picked automatically → exclude it
-      SFX.close();
-    }
+    const id = b.dataset.rx;
+    S.routeExclude[id] = !S.routeExclude[id];
+    S.routeExclude[id] ? SFX.close() : SFX.select();
     try { typeof buzz === "function" && buzz(10); } catch {}
     saveState(); renderNeed();
   });
@@ -569,7 +551,7 @@ function renderNeed() {
   const totalCrafts = fast.steps.reduce((t, st) => t + st.crafts, 0);
   $("#need-route .sub-h").innerHTML = `Fastest route ${routeCustomised() ? `<a class="route-reset" role="button">reset</a>` : ""}<span class="h-note">${fmt(totalCrafts)} crafts · ${fmt(totalCrafts * 4)} items</span>`;
   $("#need-route .route-list").innerHTML = routeRows(fast, N, true)
-    + (fast.stuck ? `<div class="res-sub warn">No included material is unlocked at Lv ${levelFromTotal(fast.cur).lv} — use + to add one.</div>` : "");
+    + (fast.stuck ? `<div class="res-sub warn">No included material is unlocked at Lv ${levelFromTotal(fast.cur).lv} — turn one back on with +.</div>` : "");
 
   $("#need-alt").innerHTML = MATS.filter(x => x.id !== N.mat).map(x => {
     const ux = unlockOf(x.id);
@@ -1130,7 +1112,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#theme-light").addEventListener("click", () => { S.theme = "light"; applyAppearance(); renderSettingsPanel(); SFX.click(); buzz(8); saveState(); });
   $("#set-glow").addEventListener("change", e => { S.glow = e.target.checked; applyAppearance(); SFX.click(); buzz(8); saveState(); });
   $("#set-anim").addEventListener("change", e => { S.anim = e.target.checked; applyAppearance(); SFX.click(); buzz(8); saveState(); });
-  $("#btn-reset-mats").addEventListener("click", () => { S.per4 = structuredClone(DEFAULTS.per4); S.unlock = structuredClone(DEFAULTS.unlock); S.routeExclude = structuredClone(DEFAULTS.routeExclude); S.routePin = structuredClone(DEFAULTS.routePin); saveState(); refreshAll(); renderSettingsPanel(); SFX.click(); buzz(10); toast("Materials reset"); });
+  $("#btn-reset-mats").addEventListener("click", () => { S.per4 = structuredClone(DEFAULTS.per4); S.unlock = structuredClone(DEFAULTS.unlock); S.routeExclude = structuredClone(DEFAULTS.routeExclude); saveState(); refreshAll(); renderSettingsPanel(); SFX.click(); buzz(10); toast("Materials reset"); });
   $("#btn-reset-all").addEventListener("click", () => {
     const keep = { need: S.need, proj: S.proj, per4: S.per4, unlock: S.unlock, tab: S.tab };
     S = { ...structuredClone(DEFAULTS), ...keep };
