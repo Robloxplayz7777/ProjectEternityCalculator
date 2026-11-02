@@ -4,6 +4,14 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.4.2] — 2026-11-02
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- **Fastest route toggles simplified to on / off.** 1.4.1's "added" mode was confusing: "added · not reached" rows, and − not removing ores you had added. Now:
+  - Every ore is **on** (red **−**) or **off** (greyed out, green **+**). One press flips it.
+  - The route always uses the **best ore that's on** at each level. Ores that are on but outranked say **"standby · better ore in use"**. For example, to run Crystalite at Lv 35 → 50, turn Obsidian and Verdite off.
+  - **reset** turns every ore back on.
+
 ## [1.4.1] — 2026-11-02
 
 ### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
