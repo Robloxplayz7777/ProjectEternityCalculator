@@ -629,3 +629,8 @@ td .lock { margin-left: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ver { font-variant-numeric: tabular-nums; font-weight: 650; }
 .update-card { right: 18px; bottom: 18px; width: 340px; max-width: calc(100vw - 36px); }
+
+.route-step.pinned { box-shadow: inset 3px 0 0 var(--good); }
+.pin-tag { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 45%, transparent); border-radius: 99px; padding: 1px 6px; margin-left: 6px; }
+.rx-btn:disabled { opacity: .25; cursor: default; filter: grayscale(1); }
+.route-reset { float: right; margin-left: 10px; font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }

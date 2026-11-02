@@ -4,6 +4,15 @@ All notable changes to the Forging XP Calculator, split by platform.
 Adding a new version section at the top and pushing it publishes that release automatically.
 Downloads for every version are on the [Releases](../../releases) page.
 
+## [1.4.1] — 2026-11-02
+
+### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
+- **Fastest route: you can now add ores, not just remove them.** Fixed: ores skipped because a better one was unlocked ("not needed") showed a red − and couldn't be brought into the route.
+  - **Green +** on a "not needed" ore adds it. The route then uses the best of the ores you've added (tagged *ADDED*), and falls back to the automatic pick where none of them is unlocked yet. For example, at Lv 35 → 50, adding Crystalite gives Crystalite all the way; adding Verdite as well gives Crystalite 35 → 45, then Verdite 45 → 50.
+  - **Red −** on an ore you added removes it again. On an automatically picked ore it excludes it (the row goes dark, and green + brings it back).
+  - Ores that unlock after your target have a disabled button.
+  - A **reset** link next to the route heading appears whenever you've customised the route.
+
 ## [1.4.0] — 2026-11-02
 
 ### 🖥️ Desktop (Windows) and 📱 Mobile (Android)
