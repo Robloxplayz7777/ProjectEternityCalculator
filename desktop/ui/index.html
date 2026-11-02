@@ -242,6 +242,13 @@
         </div>
       </section>
 
+      <section>
+        <h3>Updates</h3>
+        <div class="row"><span>Version</span><b id="set-version" class="ver">—</b></div>
+        <label class="row"><span>Check on launch</span><input id="set-autoupd" type="checkbox" class="switch"></label>
+        <div class="btn-row"><button id="btn-check-upd" class="btn">Check for updates</button></div>
+      </section>
+
       <section class="about">
         <p>XP formula: XP(L) = 136L² + 1088L + 3876 (XP to go from level L to L+1). It was derived by measuring the max XP of every blacksmithing level from 1 to 25 in-game and fitting a formula to those values; it matches all of them exactly. Levels above 25 (and theoretical mode) are extrapolated. Max level 50 (7,020,524 total XP).</p>
         <p>Shortcuts: Ctrl+1/2/3 tabs · Ctrl+, settings · Enter strike · scroll over a level to change it.</p>
@@ -260,6 +267,7 @@
   <div class="grip g-sw" data-dir="sw"></div>
 </div>
 
+<div id="update-card" class="update-card hidden" role="dialog" aria-label="Update available"></div>
 <div id="toast" class="toast hidden"></div>
 <div id="sparks" class="sparks"></div>
 

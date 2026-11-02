@@ -26,6 +26,18 @@ Grab the latest build from the **[Releases](../../releases)** page. See what cha
 Every push to `main` is also built automatically by GitHub Actions; the latest builds are under
 **Actions → Build → Artifacts**.
 
+### In-app updates
+
+Both apps compare their own version with the latest release here
+(`https://api.github.com/repos/Robloxplayz7777/ProjectEternityCalculator/releases/latest`).
+
+- **Windows:** downloads `ForgingXpCalculator.exe` from the release next to the running app, swaps it in, and restarts. The old copy is cleaned up on the next launch. If the app sits in a read-only folder, it shows an error instead, and you can download it manually.
+- **Android:** downloads `ForgingXP.apk` with the system download manager, then opens the Android installer. The first time, Android asks you to allow installs from Forging XP. **Android only accepts the update if the APK is signed with the same key as the installed app**, so set the two signing secrets below.
+
+Users can click **Later** or **Skip this version**, or turn off *Check on launch* in Settings → Updates.
+Release assets must keep the names `ForgingXpCalculator.exe` and `ForgingXP.apk`, and the version in
+`desktop/Cargo.toml` and `mobile/android/AndroidManifest.xml` must match the release tag.
+
 ### Publishing a new release
 
 Add a new section at the top of [`CHANGELOG.md`](CHANGELOG.md), for example
@@ -54,6 +66,7 @@ Without them the release APK is signed with a temporary key.
 - **XP Table**: the full curve. Click or tap a row to set your target, Shift-click or hold to set
   your start.
 - **Theoretical mode**: a toggle in the top bar that lifts the Lv 50 cap so the formula keeps going (up to Lv 500). It's off every time the app starts.
+- **Built-in updates**: on launch the app checks this repo's latest release. If there's a newer version, a card shows what's new. Click **Update & restart** on Windows, or **Download & install** on Android, to update in one go.
 - **Crafting-accurate rounding**: crafts consume 4 items at a time, so every count is a whole
   number of crafts (a multiple of 4), and leftover items are flagged as spare.
 - Synthesized sound effects, animations, dark/light themes, accent colours, brightness, and
@@ -92,9 +105,9 @@ The full table is in the app's **XP Table** tab.
 
 | Material | XP per 4 items | XP each | Unlocks at |
 |---|---:|---:|---:|
-| Iron | 320 | 80 | Lv 1 |
-| Steel | 1,120 | 280 | Lv 6 |
-| Kobold | 2,560 | 640 | Lv 15 |
+| Iron | 276 | 69 | Lv 1 |
+| Steel | 729 | 182.25 | Lv 6 |
+| Kobold | 1,992 | 498 | Lv 15 |
 | Crystalite | 3,806 | 951.5 | Lv 25 |
 | Obsidian | 5,875 | 1,468.75 | Lv 35 |
 | Verdite | 8,105 | 2,026.25 | Lv 45 |
